@@ -196,8 +196,8 @@ export function buildLWELattice(A: number[][], b: number[], q: number): Basis {
   }
 
   const last = new Array<number>(dim).fill(0);
-  for (let r = 0; r < m; r += 1) {
-    last[n + r] = ((b[r] % q) + q) % q;
+  for (let c = 0; c < n; c += 1) {
+    last[c] = ((b[c] ?? 0) % q + q) % q;
   }
   last[dim - 1] = 1;
   basis.push(last);
@@ -280,14 +280,57 @@ function bruteForceRecover(A: number[][], b: number[], q: number, n: number): nu
   return valid.ok ? best : null;
 }
 
+function toModQ(x: number, q: number): number {
+  return ((x % q) + q) % q;
+}
+
+function recoverFromShortVector(
+  shortVec: Vec,
+  A: number[][],
+  b: number[],
+  q: number,
+  n: number,
+): number[] | null {
+  const tail = shortVec[shortVec.length - 1];
+  if (Math.abs(tail) !== 1) {
+    return null;
+  }
+
+  const sign = -tail;
+  const raw = shortVec.slice(0, n).map((x) => sign * x);
+  const candidates: number[][] = [];
+  candidates.push(raw.map((x) => toModQ(x, q)));
+  candidates.push(raw.map((x) => toModQ(centeredMod(x, q), q)));
+
+  let best: number[] | null = null;
+  let bestScore = Number.POSITIVE_INFINITY;
+  for (const cand of candidates) {
+    const check = checkCandidate(A, b, q, cand);
+    if (check.residualNormSq < bestScore) {
+      best = cand;
+      bestScore = check.residualNormSq;
+    }
+    if (check.ok) {
+      return cand;
+    }
+  }
+
+  return best;
+}
+
 export function attackLWE(
   A: number[][],
   b: number[],
   q: number,
   n: number,
-): { success: boolean; recovered: number[] | null; shortVec: Vec | null } {
-  if (n >= 16) {
-    return { success: false, recovered: null, shortVec: null };
+): {
+  success: boolean;
+  recovered: number[] | null;
+  shortVec: Vec | null;
+  recoverMethod: 'short-vector' | 'bruteforce' | 'none';
+} {
+  if (n >= 20) {
+    return { success: false, recovered: null, shortVec: null, recoverMethod: 'none' };
   }
 
   const lattice = buildLWELattice(A, b, q);
@@ -303,10 +346,20 @@ export function attackLWE(
     }
   }
 
-  const recovered = bruteForceRecover(A, b, q, n);
-  if (!recovered) {
-    return { success: false, recovered: null, shortVec };
+  if (shortVec) {
+    const recoveredFromShort = recoverFromShortVector(shortVec, A, b, q, n);
+    if (recoveredFromShort) {
+      const check = checkCandidate(A, b, q, recoveredFromShort);
+      if (check.ok) {
+        return { success: true, recovered: recoveredFromShort, shortVec, recoverMethod: 'short-vector' };
+      }
+    }
   }
 
-  return { success: true, recovered, shortVec };
+  const recovered = bruteForceRecover(A, b, q, n);
+  if (!recovered) {
+    return { success: false, recovered: null, shortVec, recoverMethod: 'none' };
+  }
+
+  return { success: true, recovered, shortVec, recoverMethod: 'bruteforce' };
 }

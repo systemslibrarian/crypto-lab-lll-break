@@ -619,6 +619,7 @@ byId<HTMLButtonElement>('lwe-attack').addEventListener('click', () => {
     const recovered = result.recovered!;
     const exact = recovered.join(',') === lweInstance.secret.join(',');
     lweOutput.textContent += `\nRecovered secret: [${recovered.join(', ')}] ${exact ? 'EXACT MATCH' : 'close'}`;
+    lweOutput.textContent += `\nRecovery path: ${result.recoverMethod === 'short-vector' ? 'short vector extraction' : 'toy brute-force fallback'}`;
   } else {
     lweOutput.textContent += '\nAttack failed: no usable short vector extraction.';
   }
