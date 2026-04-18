@@ -286,6 +286,10 @@ export function attackLWE(
   q: number,
   n: number,
 ): { success: boolean; recovered: number[] | null; shortVec: Vec | null } {
+  if (n >= 16) {
+    return { success: false, recovered: null, shortVec: null };
+  }
+
   const lattice = buildLWELattice(A, b, q);
   const reduced = lllReduce(lattice).reducedBasis;
 
@@ -297,10 +301,6 @@ export function attackLWE(
       shortNormSq = ns;
       shortVec = v.slice();
     }
-  }
-
-  if (n >= 16) {
-    return { success: false, recovered: null, shortVec };
   }
 
   const recovered = bruteForceRecover(A, b, q, n);
