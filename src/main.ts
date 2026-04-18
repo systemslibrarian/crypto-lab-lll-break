@@ -275,6 +275,8 @@ function setupThemeToggle(button: HTMLButtonElement): void {
     const mode = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
     button.textContent = mode === 'dark' ? '🌙' : '☀️';
     button.setAttribute('aria-label', mode === 'dark' ? 'Switch to light mode' : 'Switch to dark mode');
+    button.setAttribute('aria-pressed', mode === 'light' ? 'true' : 'false');
+    button.title = mode === 'dark' ? 'Switch to light mode' : 'Switch to dark mode';
   };
 
   button.addEventListener('click', () => {
@@ -499,7 +501,7 @@ function renderLLLState(): void {
   const step = lllSteps[Math.min(lllCursor, lllSteps.length - 1)]!;
   drawBasisScene(lllCanvas, lllOriginal, step.after, step.gsoAfter, step.description);
 
-  lllLog.innerHTML = lllSteps
+  lllLog.textContent = lllSteps
     .slice(0, lllCursor + 1)
     .map((s, idx) => `${idx + 1}. ${s.description}`)
     .join('\n');
@@ -678,57 +680,64 @@ byId<HTMLButtonElement>('lwe-attack').addEventListener('click', () => {
     lweOutput.textContent = 'Generate an LWE instance first.';
     return;
   }
-  const n = Number(lweN.value);
-  const q = Number(lweQ.value);
-  const beta = Number(lweBeta.value);
-  lweProgress.value = 55;
-  const lattice = buildLWELattice(lweInstance.A, lweInstance.b, q);
-  const bkz = bkzReduce(lattice, beta);
-  lweProgress.value = 80;
-  const result = attackLWE(lweInstance.A, lweInstance.b, q, n);
-  const ok = result.success && result.recovered !== null;
-  const shortNorm = result.shortVec ? norm(result.shortVec) : null;
-  const targetNorm = estimateTargetNorm(n, lweInstance.A.length, Number(lweSigma.value));
-  const gapScore = scoreFromNormGap(shortNorm, targetNorm);
-  lweOutput.textContent += `\n\nRunning BKZ-${beta} on ${lattice.length}-dim lattice...`;
-  lweOutput.textContent += `\nTours: ${bkz.tours}, improvements: ${bkz.improvements}`;
-  if (bkz.tourLogs.length > 0) {
-    lweOutput.textContent += '\nTour log:';
-    for (const t of bkz.tourLogs) {
-      lweOutput.textContent += `\n  tour ${t.tour}: ${t.improvementsInTour} improvements${t.converged ? ' (converged)' : ''}`;
+  try {
+    const n = Number(lweN.value);
+    const q = Number(lweQ.value);
+    const beta = Number(lweBeta.value);
+    lweProgress.value = 55;
+    const lattice = buildLWELattice(lweInstance.A, lweInstance.b, q);
+    const bkz = bkzReduce(lattice, beta);
+    lweProgress.value = 80;
+    const result = attackLWE(lweInstance.A, lweInstance.b, q, n);
+    const ok = result.success && result.recovered !== null;
+    const shortNorm = result.shortVec ? norm(result.shortVec) : null;
+    const targetNorm = estimateTargetNorm(n, lweInstance.A.length, Number(lweSigma.value));
+    const gapScore = scoreFromNormGap(shortNorm, targetNorm);
+    lweOutput.textContent += `\n\nRunning BKZ-${beta} on ${lattice.length}-dim lattice...`;
+    lweOutput.textContent += `\nTours: ${bkz.tours}, improvements: ${bkz.improvements}`;
+    if (bkz.tourLogs.length > 0) {
+      lweOutput.textContent += '\nTour log:';
+      for (const t of bkz.tourLogs) {
+        lweOutput.textContent += `\n  tour ${t.tour}: ${t.improvementsInTour} improvements${t.converged ? ' (converged)' : ''}`;
+      }
     }
-  }
-  if (bkz.blockImprovements.length > 0) {
-    lweOutput.textContent += '\nBlock improvements:';
-    for (const imp of bkz.blockImprovements.slice(0, 8)) {
-      lweOutput.textContent += `\n  [${imp.blockStart}..${imp.blockEnd}] ||b0|| ${imp.headNormBefore.toFixed(3)} -> ${imp.insertedNorm.toFixed(3)}`;
+    if (bkz.blockImprovements.length > 0) {
+      lweOutput.textContent += '\nBlock improvements:';
+      for (const imp of bkz.blockImprovements.slice(0, 8)) {
+        lweOutput.textContent += `\n  [${imp.blockStart}..${imp.blockEnd}] ||b0|| ${imp.headNormBefore.toFixed(3)} -> ${imp.insertedNorm.toFixed(3)}`;
+      }
+      if (bkz.blockImprovements.length > 8) {
+        lweOutput.textContent += `\n  ... ${bkz.blockImprovements.length - 8} more`;
+      }
     }
-    if (bkz.blockImprovements.length > 8) {
-      lweOutput.textContent += `\n  ... ${bkz.blockImprovements.length - 8} more`; 
+    if (result.shortVec) {
+      lweOutput.textContent += `\nShortest basis vector found: [${result.shortVec.join(', ')}]`;
+      lweOutput.textContent += `\nNorm: ${shortNorm!.toFixed(4)}`;
+      lweOutput.textContent += `\nTarget-like norm estimate: ${targetNorm.toFixed(4)} (gap ${(shortNorm! / targetNorm).toFixed(2)}x)`;
     }
+    if (ok) {
+      const recovered = result.recovered!;
+      const exact = recovered.join(',') === lweInstance.secret.join(',');
+      lweOutput.textContent += `\nRecovered secret: [${recovered.join(', ')}] ${exact ? 'EXACT MATCH' : 'close'}`;
+      lweOutput.textContent += `\nRecovery path: ${result.recoverMethod === 'short-vector' ? 'short vector extraction' : 'toy brute-force fallback'}`;
+    } else {
+      lweOutput.textContent += '\nAttack failed: no usable short vector extraction.';
+    }
+    lweOutput.textContent += `\n${summarizeBKZImpact(bkz.tours, bkz.improvements, ok, result.recoverMethod)}`;
+    if (ok && result.recoverMethod === 'short-vector') {
+      updateLWEMeter(gapScore, 'short vector is close to target regime.', 'good');
+    } else if (ok) {
+      updateLWEMeter(gapScore, 'basis improved, but recovery leaned on toy fallback.', 'warn');
+    } else {
+      updateLWEMeter(gapScore, 'short vector remains far from target regime.', 'bad');
+    }
+    lweProgress.value = 100;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown attack error';
+    lweOutput.textContent += `\nAttack error: ${message}`;
+    updateLWEMeter(0, 'attack run errored before convergence.', 'bad');
+    lweProgress.value = 0;
   }
-  if (result.shortVec) {
-    lweOutput.textContent += `\nShortest basis vector found: [${result.shortVec.join(', ')}]`;
-    lweOutput.textContent += `\nNorm: ${shortNorm!.toFixed(4)}`;
-    lweOutput.textContent += `\nTarget-like norm estimate: ${targetNorm.toFixed(4)} (gap ${(shortNorm! / targetNorm).toFixed(2)}x)`;
-  }
-  if (ok) {
-    const recovered = result.recovered!;
-    const exact = recovered.join(',') === lweInstance.secret.join(',');
-    lweOutput.textContent += `\nRecovered secret: [${recovered.join(', ')}] ${exact ? 'EXACT MATCH' : 'close'}`;
-    lweOutput.textContent += `\nRecovery path: ${result.recoverMethod === 'short-vector' ? 'short vector extraction' : 'toy brute-force fallback'}`;
-  } else {
-    lweOutput.textContent += '\nAttack failed: no usable short vector extraction.';
-  }
-  lweOutput.textContent += `\n${summarizeBKZImpact(bkz.tours, bkz.improvements, ok, result.recoverMethod)}`;
-  if (ok && result.recoverMethod === 'short-vector') {
-    updateLWEMeter(gapScore, 'short vector is close to target regime.', 'good');
-  } else if (ok) {
-    updateLWEMeter(gapScore, 'basis improved, but recovery leaned on toy fallback.', 'warn');
-  } else {
-    updateLWEMeter(gapScore, 'short vector remains far from target regime.', 'bad');
-  }
-  lweProgress.value = 100;
 });
 
 byId<HTMLButtonElement>('kyber-try').addEventListener('click', () => {
