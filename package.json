@@ -7,10 +7,14 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "deploy": "npm run build && gh-pages -d dist"
+    "deploy": "npm run build && gh-pages -d dist",
+    "verify:algo": "tsx scripts/verify.ts",
+    "verify:guardrails": "node scripts/guardrails.mjs",
+    "verify": "npm run verify:algo && npm run verify:guardrails"
   },
   "devDependencies": {
     "gh-pages": "^6.3.0",
+    "tsx": "^4.21.0",
     "typescript": "~6.0.2",
     "vite": "^8.0.4"
   }
