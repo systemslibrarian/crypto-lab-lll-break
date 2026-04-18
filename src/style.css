@@ -294,6 +294,15 @@ footer {
   color: var(--muted);
 }
 
+.scripture-footer {
+  text-align: center;
+  padding: 2rem 1rem;
+  font-size: 0.85rem;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  margin-top: 2rem;
+}
+
 @media (prefers-reduced-motion: reduce) {
   * {
     animation: none !important;
