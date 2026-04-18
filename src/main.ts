@@ -124,7 +124,8 @@ app.innerHTML = `
 </section>
 
 <footer>
-  <p>"Whether therefore ye eat, or drink, or whatsoever ye do, do all to the glory of God." - 1 Corinthians 10:31</p>
+  <p>"Whether therefore ye eat, or drink, or whatsoever ye do,
+  do all to the glory of God." — 1 Corinthians 10:31</p>
 </footer>
 `;
 
@@ -279,6 +280,12 @@ function updateSliderAria(el: HTMLInputElement, label: string): void {
   el.setAttribute('aria-valuetext', `${label} ${el.value}`);
 }
 
+function bindRangeAria(el: HTMLInputElement, label: string): void {
+  const update = () => updateSliderAria(el, label);
+  el.addEventListener('input', update);
+  update();
+}
+
 function renderEx1(): void {
   latticeBasis = [
     vec2FromPolar(Number(b1Angle.value), Number(b1Len.value)),
@@ -295,6 +302,10 @@ function renderEx1(): void {
 }
 
 [b1Angle, b1Len, b2Angle, b2Len].forEach((el) => el.addEventListener('input', renderEx1));
+bindRangeAria(b1Angle, 'b1 angle');
+bindRangeAria(b1Len, 'b1 length');
+bindRangeAria(b2Angle, 'b2 angle');
+bindRangeAria(b2Len, 'b2 length');
 
 const unimodularChoices = [
   [
@@ -530,6 +541,7 @@ byId<HTMLButtonElement>('lll-reset').addEventListener('click', resetLLL);
 lllDelta.addEventListener('input', () => {
   updateSliderAria(lllDelta, 'delta');
 });
+bindRangeAria(lllDelta, 'delta');
 lllDim.addEventListener('change', () => {
   if (lllDim.value === '2') {
     lllMatrix.value = '19 2\n7 1';
@@ -706,6 +718,11 @@ function renderEx5(): void {
 }
 
 exploreN.addEventListener('input', renderEx5);
+bindRangeAria(lweN, 'n');
+bindRangeAria(lweQ, 'q');
+bindRangeAria(lweSigma, 'sigma');
+bindRangeAria(lweBeta, 'beta');
+bindRangeAria(exploreN, 'parameter n');
 
 renderEx1();
 renderEx2();
