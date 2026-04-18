@@ -11,13 +11,15 @@ if (!app) {
 const theme = document.documentElement.getAttribute('data-theme') ?? 'dark';
 
 app.innerHTML = `
+<a class="skip-link" href="#main-content">Skip to main content</a>
 <header class="topbar">
   <h1>crypto-lab-lll-break</h1>
-  <button id="theme-toggle" class="btn" aria-label="Toggle theme">${theme === 'dark' ? '☀️' : '🌙'}</button>
+  <button id="theme-toggle" type="button" class="theme-toggle" style="position: absolute; top: 0; right: 0" aria-label="${theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}">${theme === 'dark' ? '🌙' : '☀️'}</button>
 </header>
 
-<section class="exhibit" id="exhibit-1">
-  <h2>Exhibit 1 - What Is a Lattice?</h2>
+<main id="main-content">
+<section class="exhibit" id="exhibit-1" aria-labelledby="exhibit-1-title">
+  <h2 id="exhibit-1-title">Exhibit 1 - What Is a Lattice?</h2>
   <div class="grid two">
     <div>
       <canvas id="lattice-canvas" width="500" height="400" role="img" aria-label="2D lattice canvas"></canvas>
@@ -29,7 +31,7 @@ app.innerHTML = `
       <label>b1 length <input id="b1-len" type="range" min="1" max="10" value="5" /></label>
       <label>b2 angle <input id="b2-angle" type="range" min="0" max="180" value="95" /></label>
       <label>b2 length <input id="b2-len" type="range" min="1" max="10" value="4" /></label>
-      <button id="same-lattice-btn" class="btn">Same lattice, different basis</button>
+      <button id="same-lattice-btn" type="button" class="btn">Same lattice, different basis</button>
       <p>
         A lattice is all integer combinations of two basis vectors. Determinant equals area of the
         fundamental parallelogram, an invariant under unimodular basis changes.
@@ -38,17 +40,21 @@ app.innerHTML = `
   </div>
 </section>
 
-<section class="exhibit" id="exhibit-2">
-  <h2>Exhibit 2 - Gram-Schmidt Orthogonalization</h2>
+<section class="exhibit" id="exhibit-2" aria-labelledby="exhibit-2-title">
+  <h2 id="exhibit-2-title">Exhibit 2 - Gram-Schmidt Orthogonalization</h2>
   <div class="grid two">
     <div>
       <div class="matrix-grid">
-        <input id="gso-a11" type="number" value="3" />
-        <input id="gso-a12" type="number" value="1" />
-        <input id="gso-a21" type="number" value="1" />
-        <input id="gso-a22" type="number" value="2" />
+        <label class="sr-only" for="gso-a11">GSO matrix row 1 column 1</label>
+        <input id="gso-a11" type="number" inputmode="numeric" value="3" />
+        <label class="sr-only" for="gso-a12">GSO matrix row 1 column 2</label>
+        <input id="gso-a12" type="number" inputmode="numeric" value="1" />
+        <label class="sr-only" for="gso-a21">GSO matrix row 2 column 1</label>
+        <input id="gso-a21" type="number" inputmode="numeric" value="1" />
+        <label class="sr-only" for="gso-a22">GSO matrix row 2 column 2</label>
+        <input id="gso-a22" type="number" inputmode="numeric" value="2" />
       </div>
-      <button id="gso-next" class="btn">Next</button>
+      <button id="gso-next" type="button" class="btn">Next</button>
       <pre id="gso-text" class="mono panel"></pre>
       <p class="panel">
         Gram-Schmidt vectors and mu coefficients are floating point. Basis vectors remain exact integers.
@@ -60,8 +66,8 @@ app.innerHTML = `
   </div>
 </section>
 
-<section class="exhibit" id="exhibit-3">
-  <h2>Exhibit 3 - LLL Step-by-Step</h2>
+<section class="exhibit" id="exhibit-3" aria-labelledby="exhibit-3-title">
+  <h2 id="exhibit-3-title">Exhibit 3 - LLL Step-by-Step</h2>
   <div class="controls-row">
     <label>Dimension
       <select id="lll-dim">
@@ -70,18 +76,18 @@ app.innerHTML = `
       </select>
     </label>
     <label>Delta <input id="lll-delta" type="range" min="0.5" max="0.999" step="0.001" value="0.75" /></label>
-    <button class="btn preset" data-preset="random2d">Random bad 2D</button>
-    <button class="btn preset" data-preset="classic">Classic example</button>
-    <button class="btn preset" data-preset="near">Near-orthogonal</button>
-    <button class="btn preset" data-preset="challenge3d">3D challenge</button>
-    <button class="btn preset" data-preset="qary">LWE-style q-ary</button>
+    <button type="button" class="btn preset" data-preset="random2d">Random bad 2D</button>
+    <button type="button" class="btn preset" data-preset="classic">Classic example</button>
+    <button type="button" class="btn preset" data-preset="near">Near-orthogonal</button>
+    <button type="button" class="btn preset" data-preset="challenge3d">3D challenge</button>
+    <button type="button" class="btn preset" data-preset="qary">LWE-style q-ary</button>
   </div>
   <textarea id="lll-matrix" class="mono" rows="4">19 2
 7 1</textarea>
   <div class="controls-row">
-    <button id="lll-step" class="btn">Step</button>
-    <button id="lll-auto" class="btn">Auto</button>
-    <button id="lll-reset" class="btn">Reset</button>
+    <button id="lll-step" type="button" class="btn">Step</button>
+    <button id="lll-auto" type="button" class="btn">Auto</button>
+    <button id="lll-reset" type="button" class="btn">Reset</button>
   </div>
   <div class="grid two">
     <div>
@@ -95,29 +101,29 @@ app.innerHTML = `
   </div>
 </section>
 
-<section class="exhibit" id="exhibit-4">
-  <h2>Exhibit 4 - Break a Toy LWE Instance</h2>
+<section class="exhibit" id="exhibit-4" aria-labelledby="exhibit-4-title">
+  <h2 id="exhibit-4-title">Exhibit 4 - Break a Toy LWE Instance</h2>
   <div class="controls-row">
     <label>n <input id="lwe-n" type="range" min="2" max="12" value="4" /></label>
     <label>q <input id="lwe-q" type="range" min="7" max="257" value="71" /></label>
     <label>sigma <input id="lwe-sigma" type="range" min="1" max="10" value="2" /></label>
     <label>beta <input id="lwe-beta" type="range" min="2" max="8" value="2" /></label>
-    <button id="lwe-generate" class="btn">Generate LWE Instance</button>
-    <button id="lwe-attack" class="btn">Run LLL/BKZ Attack</button>
-    <button id="kyber-try" class="btn warn">Try Kyber-512 parameters</button>
+    <button id="lwe-generate" type="button" class="btn">Generate LWE Instance</button>
+    <button id="lwe-attack" type="button" class="btn">Run LLL/BKZ Attack</button>
+    <button id="kyber-try" type="button" class="btn warn">Try Kyber-512 parameters</button>
   </div>
-  <progress id="lwe-progress" max="100" value="0"></progress>
+  <progress id="lwe-progress" max="100" value="0" aria-label="LWE attack progress"></progress>
   <div class="lwe-meter panel" role="status" aria-live="polite">
     <div class="lwe-meter-head mono" id="lwe-meter-text">Norm-gap confidence: waiting for attack run.</div>
     <div class="lwe-meter-track" aria-hidden="true">
       <div id="lwe-meter-fill" class="lwe-meter-fill"></div>
     </div>
   </div>
-  <pre id="lwe-output" class="panel mono"></pre>
+  <pre id="lwe-output" class="panel mono" aria-live="polite"></pre>
 </section>
 
-<section class="exhibit" id="exhibit-5">
-  <h2>Exhibit 5 - Parameter Explorer</h2>
+<section class="exhibit" id="exhibit-5" aria-labelledby="exhibit-5-title">
+  <h2 id="exhibit-5-title">Exhibit 5 - Parameter Explorer</h2>
   <label>n <input id="explore-n" type="range" min="4" max="256" value="8" /></label>
   <div class="grid two">
     <pre id="explore-left" class="panel mono"></pre>
@@ -128,6 +134,8 @@ app.innerHTML = `
     ML-KEM (Kyber), FrodoKEM, ML-DSA (Dilithium), and FALCON all rely on LLL/BKZ failing at chosen parameters.
   </p>
 </section>
+
+</main>
 
 <footer>
   <p>"Whether therefore ye eat, or drink, or whatsoever ye do,
@@ -265,12 +273,25 @@ function drawBasisScene(
 }
 
 const themeToggle = byId<HTMLButtonElement>('theme-toggle');
-themeToggle.addEventListener('click', () => {
-  const current = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
-  document.documentElement.setAttribute('data-theme', current);
-  localStorage.setItem('cv-theme', current);
-  themeToggle.textContent = current === 'dark' ? '☀️' : '🌙';
-});
+
+function setupThemeToggle(button: HTMLButtonElement): void {
+  const sync = () => {
+    const mode = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+    button.textContent = mode === 'dark' ? '🌙' : '☀️';
+    button.setAttribute('aria-label', mode === 'dark' ? 'Switch to light mode' : 'Switch to dark mode');
+  };
+
+  button.addEventListener('click', () => {
+    const next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    localStorage.setItem('theme', next);
+    sync();
+  });
+
+  sync();
+}
+
+setupThemeToggle(themeToggle);
 
 const b1Angle = byId<HTMLInputElement>('b1-angle');
 const b1Len = byId<HTMLInputElement>('b1-len');
