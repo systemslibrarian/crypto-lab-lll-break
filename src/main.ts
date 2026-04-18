@@ -107,6 +107,12 @@ app.innerHTML = `
     <button id="kyber-try" class="btn warn">Try Kyber-512 parameters</button>
   </div>
   <progress id="lwe-progress" max="100" value="0"></progress>
+  <div class="lwe-meter panel" role="status" aria-live="polite">
+    <div class="lwe-meter-head mono" id="lwe-meter-text">Norm-gap confidence: waiting for attack run.</div>
+    <div class="lwe-meter-track" aria-hidden="true">
+      <div id="lwe-meter-fill" class="lwe-meter-fill"></div>
+    </div>
+  </div>
   <pre id="lwe-output" class="panel mono"></pre>
 </section>
 
@@ -561,7 +567,43 @@ const lweSigma = byId<HTMLInputElement>('lwe-sigma');
 const lweBeta = byId<HTMLInputElement>('lwe-beta');
 const lweOutput = byId<HTMLPreElement>('lwe-output');
 const lweProgress = byId<HTMLProgressElement>('lwe-progress');
+const lweMeterText = byId<HTMLDivElement>('lwe-meter-text');
+const lweMeterFill = byId<HTMLDivElement>('lwe-meter-fill');
 let lweInstance: Awaited<ReturnType<typeof generateLWE>> | null = null;
+
+function updateLWEMeter(
+  score: number,
+  message: string,
+  color: 'good' | 'warn' | 'bad',
+): void {
+  const clamped = clamp(score, 0, 100);
+  lweMeterFill.style.width = `${clamped.toFixed(1)}%`;
+  if (color === 'good') {
+    lweMeterFill.style.background = 'linear-gradient(90deg, #00ff88, #66ffb5)';
+  } else if (color === 'warn') {
+    lweMeterFill.style.background = 'linear-gradient(90deg, #ffaa00, #ffd166)';
+  } else {
+    lweMeterFill.style.background = 'linear-gradient(90deg, #ff3366, #ff6b8f)';
+  }
+  lweMeterText.textContent = `Norm-gap confidence: ${clamped.toFixed(1)}% - ${message}`;
+}
+
+function estimateTargetNorm(n: number, m: number, sigma: number): number {
+  return Math.sqrt(n + m * sigma * sigma + 1);
+}
+
+function scoreFromNormGap(shortNorm: number | null, targetNorm: number): number {
+  if (shortNorm === null || !Number.isFinite(shortNorm) || targetNorm <= 0) {
+    return 0;
+  }
+  const gap = shortNorm / targetNorm;
+  if (!Number.isFinite(gap) || gap <= 1) {
+    return 100;
+  }
+  const decay = 18;
+  const score = 100 * Math.exp(-(gap - 1) / decay);
+  return clamp(score, 0, 100);
+}
 
 function summarizeBKZImpact(
   tours: number,
@@ -610,6 +652,7 @@ byId<HTMLButtonElement>('lwe-generate').addEventListener('click', async () => {
     `Embedding lattice (${lattice.length}x${lattice[0].length}):`,
     fmtMatrix(lattice, 5),
   ].join('\n');
+  updateLWEMeter(0, 'instance generated, run attack to measure gap.', 'warn');
   lweProgress.value = 40;
 });
 
@@ -627,6 +670,9 @@ byId<HTMLButtonElement>('lwe-attack').addEventListener('click', () => {
   lweProgress.value = 80;
   const result = attackLWE(lweInstance.A, lweInstance.b, q, n);
   const ok = result.success && result.recovered !== null;
+  const shortNorm = result.shortVec ? norm(result.shortVec) : null;
+  const targetNorm = estimateTargetNorm(n, lweInstance.A.length, Number(lweSigma.value));
+  const gapScore = scoreFromNormGap(shortNorm, targetNorm);
   lweOutput.textContent += `\n\nRunning BKZ-${beta} on ${lattice.length}-dim lattice...`;
   lweOutput.textContent += `\nTours: ${bkz.tours}, improvements: ${bkz.improvements}`;
   if (bkz.tourLogs.length > 0) {
@@ -646,7 +692,8 @@ byId<HTMLButtonElement>('lwe-attack').addEventListener('click', () => {
   }
   if (result.shortVec) {
     lweOutput.textContent += `\nShortest basis vector found: [${result.shortVec.join(', ')}]`;
-    lweOutput.textContent += `\nNorm: ${norm(result.shortVec).toFixed(4)}`;
+    lweOutput.textContent += `\nNorm: ${shortNorm!.toFixed(4)}`;
+    lweOutput.textContent += `\nTarget-like norm estimate: ${targetNorm.toFixed(4)} (gap ${(shortNorm! / targetNorm).toFixed(2)}x)`;
   }
   if (ok) {
     const recovered = result.recovered!;
@@ -657,6 +704,13 @@ byId<HTMLButtonElement>('lwe-attack').addEventListener('click', () => {
     lweOutput.textContent += '\nAttack failed: no usable short vector extraction.';
   }
   lweOutput.textContent += `\n${summarizeBKZImpact(bkz.tours, bkz.improvements, ok, result.recoverMethod)}`;
+  if (ok && result.recoverMethod === 'short-vector') {
+    updateLWEMeter(gapScore, 'short vector is close to target regime.', 'good');
+  } else if (ok) {
+    updateLWEMeter(gapScore, 'basis improved, but recovery leaned on toy fallback.', 'warn');
+  } else {
+    updateLWEMeter(gapScore, 'short vector remains far from target regime.', 'bad');
+  }
   lweProgress.value = 100;
 });
 
@@ -672,6 +726,7 @@ byId<HTMLButtonElement>('kyber-try').addEventListener('click', () => {
   lweOutput.textContent += '\nBKZ-2 (LLL) does not recover target-length vectors in this regime.';
   lweOutput.textContent += `\nRequired block size beta~${reqBeta}, cost~2^${costExp.toFixed(0)} operations.`;
   lweOutput.textContent += '\nThis demonstrates why real Kyber parameters resist LLL/BKZ at practical resources.';
+  updateLWEMeter(1, 'Kyber-scale regime: norm gap is overwhelmingly large.', 'bad');
 });
 
 const exploreN = byId<HTMLInputElement>('explore-n');
