@@ -563,6 +563,24 @@ const lweOutput = byId<HTMLPreElement>('lwe-output');
 const lweProgress = byId<HTMLProgressElement>('lwe-progress');
 let lweInstance: Awaited<ReturnType<typeof generateLWE>> | null = null;
 
+function summarizeBKZImpact(
+  tours: number,
+  improvements: number,
+  success: boolean,
+  recoverMethod: 'short-vector' | 'bruteforce' | 'none',
+): string {
+  if (improvements === 0) {
+    return 'Why this tour mattered: BKZ made no block improvements, so the basis stayed too coarse to expose a useful secret vector.';
+  }
+  if (!success) {
+    return `Why this tour mattered: BKZ improved ${improvements} block(s) over ${tours} tour(s), but not enough to isolate a target-shaped short vector.`;
+  }
+  if (recoverMethod === 'short-vector') {
+    return `Why this tour mattered: BKZ improvements compressed the basis enough to expose a short vector consistent with (s, e, -1).`;
+  }
+  return `Why this tour mattered: BKZ improved the basis structure, then the toy fallback recovered s from the low-noise residual pattern.`;
+}
+
 function fmtMatrix(m: number[][], maxRows = 6): string {
   const rows = m.slice(0, maxRows).map((r) => `  [${r.join(', ')}]`);
   if (m.length > maxRows) rows.push('  ...');
@@ -638,6 +656,7 @@ byId<HTMLButtonElement>('lwe-attack').addEventListener('click', () => {
   } else {
     lweOutput.textContent += '\nAttack failed: no usable short vector extraction.';
   }
+  lweOutput.textContent += `\n${summarizeBKZImpact(bkz.tours, bkz.improvements, ok, result.recoverMethod)}`;
   lweProgress.value = 100;
 });
 
