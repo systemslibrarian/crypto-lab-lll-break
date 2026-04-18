@@ -6,6 +6,20 @@ interface EnumerationState {
   bestCoeffs: number[] | null;
 }
 
+export interface BKZBlockImprovement {
+  tour: number;
+  blockStart: number;
+  blockEnd: number;
+  headNormBefore: number;
+  insertedNorm: number;
+}
+
+export interface BKZTourLog {
+  tour: number;
+  improvementsInTour: number;
+  converged: boolean;
+}
+
 function randomUint32(): number {
   const a = new Uint32Array(1);
   crypto.getRandomValues(a);
@@ -125,7 +139,13 @@ export function enumerateSVP(basis: Basis): Vec | null {
 export function bkzReduce(
   inputBasis: Basis,
   beta: number,
-): { reducedBasis: Basis; tours: number; improvements: number } {
+): {
+  reducedBasis: Basis;
+  tours: number;
+  improvements: number;
+  blockImprovements: BKZBlockImprovement[];
+  tourLogs: BKZTourLog[];
+} {
   if (beta < 2) {
     throw new Error('BKZ beta must be >= 2');
   }
@@ -133,11 +153,14 @@ export function bkzReduce(
   const n = basis.length;
   let improvements = 0;
   let tours = 0;
+  const blockImprovements: BKZBlockImprovement[] = [];
+  const tourLogs: BKZTourLog[] = [];
 
   const maxTours = 20;
   while (tours < maxTours) {
     tours += 1;
     let improvedThisTour = false;
+    let improvementsInTour = 0;
 
     for (let i = 0; i < n; i += 1) {
       const end = Math.min(i + beta, n);
@@ -152,6 +175,13 @@ export function bkzReduce(
       const shortNorm = norm(short);
       const headNorm = norm(block[0]);
       if (shortNorm + 1e-9 < headNorm) {
+        blockImprovements.push({
+          tour: tours,
+          blockStart: i,
+          blockEnd: end - 1,
+          headNormBefore: headNorm,
+          insertedNorm: shortNorm,
+        });
         block[0] = short;
         const blockReduced = lllReduce(block).reducedBasis;
         for (let k = 0; k < blockReduced.length; k += 1) {
@@ -159,16 +189,19 @@ export function bkzReduce(
         }
         improvedThisTour = true;
         improvements += 1;
+        improvementsInTour += 1;
       }
     }
 
     if (!improvedThisTour) {
+      tourLogs.push({ tour: tours, improvementsInTour: 0, converged: true });
       break;
     }
+    tourLogs.push({ tour: tours, improvementsInTour, converged: false });
     basis = lllReduce(basis).reducedBasis;
   }
 
-  return { reducedBasis: basis, tours, improvements };
+  return { reducedBasis: basis, tours, improvements, blockImprovements, tourLogs };
 }
 
 export function buildLWELattice(A: number[][], b: number[], q: number): Basis {

@@ -611,6 +611,21 @@ byId<HTMLButtonElement>('lwe-attack').addEventListener('click', () => {
   const ok = result.success && result.recovered !== null;
   lweOutput.textContent += `\n\nRunning BKZ-${beta} on ${lattice.length}-dim lattice...`;
   lweOutput.textContent += `\nTours: ${bkz.tours}, improvements: ${bkz.improvements}`;
+  if (bkz.tourLogs.length > 0) {
+    lweOutput.textContent += '\nTour log:';
+    for (const t of bkz.tourLogs) {
+      lweOutput.textContent += `\n  tour ${t.tour}: ${t.improvementsInTour} improvements${t.converged ? ' (converged)' : ''}`;
+    }
+  }
+  if (bkz.blockImprovements.length > 0) {
+    lweOutput.textContent += '\nBlock improvements:';
+    for (const imp of bkz.blockImprovements.slice(0, 8)) {
+      lweOutput.textContent += `\n  [${imp.blockStart}..${imp.blockEnd}] ||b0|| ${imp.headNormBefore.toFixed(3)} -> ${imp.insertedNorm.toFixed(3)}`;
+    }
+    if (bkz.blockImprovements.length > 8) {
+      lweOutput.textContent += `\n  ... ${bkz.blockImprovements.length - 8} more`; 
+    }
+  }
   if (result.shortVec) {
     lweOutput.textContent += `\nShortest basis vector found: [${result.shortVec.join(', ')}]`;
     lweOutput.textContent += `\nNorm: ${norm(result.shortVec).toFixed(4)}`;
