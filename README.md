@@ -1,62 +1,36 @@
 ## What It Is
 
-Browser-based demonstration of the LLL lattice reduction algorithm
-(Lenstra, Lenstra, Lovasz, 1982) and its successor BKZ - the tools
-attackers use against lattice-based cryptography.
-
-Every post-quantum system in the crypto-lab suite (ML-KEM, FrodoKEM,
-ML-DSA, FALCON) claims security based on the hardness of lattice problems.
-This demo makes that claim tangible: watch LLL reduce a bad basis to a
-good one step-by-step, embed a toy LWE instance into a lattice and
-recover the secret in milliseconds, then watch the exact same attack fail
-catastrophically at Kyber's actual parameters.
-
-Implements the full LLL algorithm with exact Gram-Schmidt orthogonalization,
-Lovasz condition checking, and step-by-step animation. Includes a toy LWE
-attacker using the primal embedding and BKZ reduction, and a parameter
-explorer showing exactly where and why security emerges.
+This demo shows LLL lattice reduction and toy BKZ reduction on Learning With Errors (LWE) embeddings in the browser. It focuses on the attacker workflow: reduce a basis, search for short vectors, and test whether secret recovery is possible at a chosen parameter set. The core problem illustrated is how SVP-approximation quality affects practical LWE attacks. This is a post-quantum cryptography educational model, not a production cryptanalytic tool and not evidence that LLL breaks real Kyber parameters.
 
 ## When to Use It
 
-- Understanding why post-quantum parameter choices (n, q, sigma) are not arbitrary
-- Seeing what "lattice problems are hard" actually means operationally
-- Teaching the connection between SVP hardness and LWE security
-- Exploring the gap between toy insecure parameters and real deployments
+- Teaching why post-quantum parameters matter in lattice cryptography. This demo makes the relationship between dimension, modulus, noise, and attack feasibility visible.
+- Explaining LLL and BKZ mechanics to students or engineers. Step traces and block-improvement logs show what each reduction phase actually changes.
+- Comparing toy insecure settings against Kyber-like settings. The same pipeline can be run at small and large parameters to show where attacks stop being effective.
+- Demonstrating how primal LWE embeddings are constructed. The matrix and reduction output are shown directly so learners can inspect the attack surface.
+- Not for real-world security assessment. This browser implementation is intentionally simplified and does not replace specialized lattice estimators or high-performance reduction libraries.
 
 ## Live Demo
 
 https://systemslibrarian.github.io/crypto-lab-lll-break/
 
-## GitHub Pages Deployment
+The live app lets you step through LLL, inspect Gram-Schmidt/Lovasz behavior, generate toy LWE instances, and run LLL/BKZ-based recovery attempts. It does not perform encryption/decryption; it demonstrates reduction-and-recovery attack dynamics for educational analysis. Controls include lattice dimension presets, delta, LWE parameters (`n`, `q`, `sigma`), and BKZ block size (`beta`).
 
-1. Push this repository to the `main` branch on GitHub.
-2. In repository settings, open Pages and set Source to GitHub Actions.
-3. Ensure Actions are enabled for the repository.
-4. The workflow at `.github/workflows/deploy.yml` will build with Vite and publish `dist`.
-5. Site URL will be: `https://systemslibrarian.github.io/crypto-lab-lll-break/`.
+## How to Run Locally
 
-This project already sets `base: '/crypto-lab-lll-break/'` in `vite.config.ts`,
-which is required for correct asset paths on GitHub Pages project sites.
+```bash
+git clone https://github.com/systemslibrarian/crypto-lab-lll-break
+cd crypto-lab-lll-break
+npm install
+npm run dev
+```
 
-## What Can Go Wrong
+No environment variables are required.
 
-- LLL uses floating-point Gram-Schmidt coefficients. For high-dimensional
-  or poorly conditioned lattices, numerical precision can affect results.
-  This is a known limitation of floating-point LLL - production implementations
-  use multiple-precision arithmetic (MPFR). The demo documents this.
-- BKZ with large block sizes (beta > 8) is not browser-feasible. The demo
-  simulates the cost rather than running it. Real BKZ-400 would take years.
-- The simplified security estimator (beta ~= n / (2*log2(q/sigma))) is an
-  approximation. The exact lattice estimator (lattice-estimator.readthedocs.io)
-  is far more precise but requires Python.
+## Part of the Crypto-Lab Suite
 
-## Real-World Usage
+One of 60+ live browser demos at [systemslibrarian.github.io/crypto-lab](https://systemslibrarian.github.io/crypto-lab/) — spanning Atbash (600 BCE) through NIST FIPS 203/204/205 (2024).
 
-LLL has broken: Merkle-Hellman knapsack cryptosystem (1983), RSA with
-small private exponent (Boneh-Durfee), truncated linear congruential generators,
-and DSA with biased nonces. BKZ is the current state-of-the-art for lattice
-attacks and is used to set security parameters for all NIST PQC standards.
+---
 
-The required BKZ block size beta for breaking Kyber-512 is approximately 400,
-with attack cost ~2^117. NIST's security analysis confirms this. The demo
-shows this failure explicitly - not just claims it.
+*"Whether you eat or drink, or whatever you do, do all to the glory of God." — 1 Corinthians 10:31*
