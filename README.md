@@ -27,6 +27,17 @@ explorer showing exactly where and why security emerges.
 
 https://systemslibrarian.github.io/crypto-lab-lll-break/
 
+## GitHub Pages Deployment
+
+1. Push this repository to the `main` branch on GitHub.
+2. In repository settings, open Pages and set Source to GitHub Actions.
+3. Ensure Actions are enabled for the repository.
+4. The workflow at `.github/workflows/deploy.yml` will build with Vite and publish `dist`.
+5. Site URL will be: `https://systemslibrarian.github.io/crypto-lab-lll-break/`.
+
+This project already sets `base: '/crypto-lab-lll-break/'` in `vite.config.ts`,
+which is required for correct asset paths on GitHub Pages project sites.
+
 ## What Can Go Wrong
 
 - LLL uses floating-point Gram-Schmidt coefficients. For high-dimensional
