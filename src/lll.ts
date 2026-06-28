@@ -22,6 +22,10 @@ export interface LLLStep {
   muAfter: number[][];
   lovaszSatisfied?: boolean;
   reductionCoeff?: number;
+  // Running unimodular transform U after this step: reducedBasis = U * inputBasis.
+  // Every entry is an integer and |det(U)| = 1, which is the proof that the
+  // lattice is unchanged while the basis is rewritten.
+  transformAfter: number[][];
   description: string;
 }
 
@@ -29,7 +33,43 @@ function cloneMu(mu: number[][]): number[][] {
   return mu.map((row) => row.slice());
 }
 
-function determinant(matrix: number[][]): number {
+function identity(n: number): number[][] {
+  return Array.from({ length: n }, (_, i) =>
+    Array.from({ length: n }, (_, j) => (i === j ? 1 : 0)),
+  );
+}
+
+// Mirror a basis row operation b_k <- b_k - c*b_j onto the transform matrix, so
+// U keeps tracking reducedBasis = U * inputBasis exactly.
+function transformRowReduce(u: number[][], k: number, j: number, c: number): void {
+  if (c === 0) return;
+  for (let col = 0; col < u[k].length; col += 1) {
+    u[k][col] -= c * u[j][col];
+  }
+}
+
+function transformSwap(u: number[][], k: number): void {
+  const tmp = u[k];
+  u[k] = u[k + 1];
+  u[k + 1] = tmp;
+}
+
+/** Integer matrix product M * B over rows (each row of M selects rows of B). */
+export function applyTransform(u: number[][], basis: Basis): Basis {
+  return u.map((urow) => {
+    const out = new Array<number>(basis[0].length).fill(0);
+    for (let j = 0; j < urow.length; j += 1) {
+      const coeff = urow[j];
+      if (coeff === 0) continue;
+      for (let c = 0; c < out.length; c += 1) {
+        out[c] += coeff * basis[j][c];
+      }
+    }
+    return out;
+  });
+}
+
+export function determinant(matrix: number[][]): number {
   const n = matrix.length;
   const m = matrix.map((row) => row.slice());
   let det = 1;
@@ -64,10 +104,13 @@ function determinant(matrix: number[][]): number {
 export function lllReduce(
   inputBasis: Basis,
   delta = 0.75,
-): { reducedBasis: Basis; steps: LLLStep[]; swapCount: number } {
+): { reducedBasis: Basis; steps: LLLStep[]; swapCount: number; transform: number[][] } {
   const basis = cloneBasis(inputBasis);
   const n = basis.length;
   const steps: LLLStep[] = [];
+  // U starts as the identity and accumulates every row operation, so that at all
+  // times basis === U * inputBasis. See LLLStep.transformAfter.
+  const u = identity(n);
 
   if (n <= 1) {
     const { gso, mu } = gramSchmidt(basis);
@@ -80,9 +123,10 @@ export function lllReduce(
       gsoAfter: cloneBasis(gso),
       muBefore: cloneMu(mu),
       muAfter: cloneMu(mu),
+      transformAfter: cloneMu(u),
       description: 'LLL complete (trivial basis).',
     });
-    return { reducedBasis: basis, steps, swapCount: 0 };
+    return { reducedBasis: basis, steps, swapCount: 0, transform: u };
   }
 
   let k = 1;
@@ -100,6 +144,7 @@ export function lllReduce(
       const before = cloneBasis(basis);
       const beforeGS = gramSchmidt(basis);
       const coeff = sizeReduce(basis, k, j);
+      transformRowReduce(u, k, j, coeff);
       const after = cloneBasis(basis);
       const afterGS = gramSchmidt(basis);
       steps.push({
@@ -113,6 +158,7 @@ export function lllReduce(
         muBefore: cloneMu(beforeGS.mu),
         muAfter: cloneMu(afterGS.mu),
         reductionCoeff: coeff,
+        transformAfter: cloneMu(u),
         description:
           coeff === 0
             ? `k=${k}, j=${j}: size reduction skipped (round(mu)=0).`
@@ -137,11 +183,13 @@ export function lllReduce(
         muBefore: cloneMu(beforeGS.mu),
         muAfter: cloneMu(afterGS.mu),
         lovaszSatisfied: true,
+        transformAfter: cloneMu(u),
         description: `k=${k}: Lovasz satisfied, advance to k=${k + 1}.`,
       });
       k += 1;
     } else {
       swapVectors(basis, k - 1);
+      transformSwap(u, k - 1);
       swapCount += 1;
       const after = cloneBasis(basis);
       const afterGS = gramSchmidt(basis);
@@ -155,6 +203,7 @@ export function lllReduce(
         muBefore: cloneMu(beforeGS.mu),
         muAfter: cloneMu(afterGS.mu),
         lovaszSatisfied: false,
+        transformAfter: cloneMu(u),
         description: `k=${k}: Lovasz violated, swap b[${k - 1}] and b[${k}].`,
       });
       k = Math.max(k - 1, 1);
@@ -171,10 +220,11 @@ export function lllReduce(
     gsoAfter: cloneBasis(finalGS.gso),
     muBefore: cloneMu(finalGS.mu),
     muAfter: cloneMu(finalGS.mu),
+    transformAfter: cloneMu(u),
     description: `LLL complete: ${swapCount} swaps, ${steps.length} trace steps.`,
   });
 
-  return { reducedBasis: basis, steps, swapCount };
+  return { reducedBasis: basis, steps, swapCount, transform: u };
 }
 
 export function basisProfile(basis: Basis): number[] {

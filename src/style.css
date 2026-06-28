@@ -68,20 +68,18 @@ body {
   padding: 16px;
 }
 
+/* Not sticky and not a landmark: the shared site header (.cl-topbar) is the only
+   sticky banner. A second sticky bar here would overlap it on scroll. */
 .topbar {
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 12px;
   position: relative;
-  position: sticky;
-  top: 0;
-  z-index: 40;
-  padding: 12px 64px 12px 12px;
+  padding: 12px;
   border: 1px solid var(--line);
   border-radius: 10px;
   background: color-mix(in srgb, var(--bg-soft) 92%, transparent);
-  backdrop-filter: blur(6px);
 }
 
 h1,
@@ -229,6 +227,81 @@ canvas {
   background: var(--panel);
   padding: 10px;
   color: var(--muted);
+}
+
+/* Matrix/vector dumps are monospaced and can be wider than a phone screen.
+   Scroll them inside their own box instead of forcing the whole page wider. */
+pre.panel,
+pre.mono {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.objective {
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  border-left: 3px solid var(--cyan);
+  background: color-mix(in srgb, var(--cyan) 8%, transparent);
+  border-radius: 0 8px 8px 0;
+  font-size: 0.92rem;
+  color: var(--muted);
+}
+
+.objective strong {
+  color: var(--text);
+}
+
+details.selfcheck {
+  margin-top: 14px;
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: color-mix(in srgb, var(--panel) 55%, transparent);
+}
+
+details.selfcheck > summary {
+  cursor: pointer;
+  font-weight: 700;
+  color: var(--text);
+}
+
+details.selfcheck > summary:focus-visible {
+  outline: 3px solid var(--gold);
+  outline-offset: 2px;
+}
+
+details.selfcheck p {
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.model-note {
+  margin-top: 12px;
+  font-size: 0.86rem;
+  color: var(--muted);
+}
+
+.model-note summary {
+  cursor: pointer;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.challenge {
+  margin-top: 14px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--bg-soft) 70%, transparent);
+}
+
+.challenge p {
+  margin: 0 0 10px;
+}
+
+.challenge .btn {
+  width: auto;
 }
 
 .sr-only {

@@ -1,5 +1,6 @@
 import { lllReduce } from './lll';
 import { dot, gramSchmidt, norm, type Basis, type Vec } from './lattice';
+import { randomIntInclusive, randomUnit } from './rng';
 
 interface EnumerationState {
   bestNormSq: number;
@@ -18,21 +19,6 @@ export interface BKZTourLog {
   tour: number;
   improvementsInTour: number;
   converged: boolean;
-}
-
-function randomUint32(): number {
-  const a = new Uint32Array(1);
-  crypto.getRandomValues(a);
-  return a[0] ?? 0;
-}
-
-function randomIntInclusive(min: number, max: number): number {
-  const span = max - min + 1;
-  return min + (randomUint32() % span);
-}
-
-function randomUnit(): number {
-  return (randomUint32() + 1) / 4294967297;
 }
 
 function centeredMod(x: number, q: number): number {
@@ -182,9 +168,16 @@ export function bkzReduce(
           headNormBefore: headNorm,
           insertedNorm: shortNorm,
         });
-        block[0] = short;
-        const blockReduced = lllReduce(block).reducedBasis;
-        for (let k = 0; k < blockReduced.length; k += 1) {
+        // Lattice-preserving insertion (what real BKZ does): insert the
+        // enumerated short vector as an extra generator and LLL-reduce the
+        // (block.length + 1) set. `short` is an integer combination of the block,
+        // so the set is rank-deficient and LLL yields exactly one zero vector;
+        // dropping it gives a true basis of the SAME block lattice with `short`
+        // pulled to the front. Overwriting block[0] instead (the old shortcut)
+        // only preserves the lattice when short's coefficient on block[0] is +-1.
+        const generating = [short.slice(), ...block];
+        const blockReduced = lllReduce(generating).reducedBasis.filter((v) => dot(v, v) > 1e-9);
+        for (let k = 0; k < block.length && k < blockReduced.length; k += 1) {
           basis[i + k] = blockReduced[k];
         }
         improvedThisTour = true;
@@ -204,6 +197,28 @@ export function bkzReduce(
   return { reducedBasis: basis, tours, improvements, blockImprovements, tourLogs };
 }
 
+/**
+ * Primal (Kannan) embedding of an LWE instance b = A*s + e (mod q).
+ *
+ * The lattice is spanned by the rows of the (n + m + 1) x (n + m + 1) matrix
+ *
+ *     [ I_n   A^T   0 ]   <- n rows: column i of A^T is column i of A
+ *     [ 0     q*I_m 0 ]   <- m rows: the q-ary relations on the error block
+ *     [ 0     b^T   1 ]   <- 1 row:  the embedding / target shift
+ *
+ * Columns are grouped as [ n secret coords | m error coords | 1 embed coord ].
+ * Take the last row once and subtract s_i times row i for each i:
+ *
+ *     (0, b, 1) - sum_i s_i (e_i, A[:,i], 0) = (-s, b - A*s, 1) = (-s, e, 1)
+ *
+ * after reducing the middle block modulo q with the q*I_m rows (since
+ * b - A*s == e (mod q)). That vector has norm ~ sqrt(|s|^2 + |e|^2 + 1), so for
+ * toy parameters it is by far the shortest non-zero lattice vector and LLL/BKZ
+ * surfaces it. Reading its first n coordinates (negated, since the embed coord
+ * comes out as +1) hands back the secret -- a genuine reduction attack, not a
+ * search over secrets. This is the construction every other piece of the demo
+ * depends on, so it must be the textbook one.
+ */
 export function buildLWELattice(A: number[][], b: number[], q: number): Basis {
   const m = A.length;
   const n = A[0]?.length ?? 0;
@@ -213,24 +228,27 @@ export function buildLWELattice(A: number[][], b: number[], q: number): Basis {
   const dim = n + m + 1;
   const basis: Basis = [];
 
+  // n rows: [ I_n | A^T | 0 ]
   for (let i = 0; i < n; i += 1) {
     const row = new Array<number>(dim).fill(0);
-    row[i] = q;
+    row[i] = 1;
+    for (let r = 0; r < m; r += 1) {
+      row[n + r] = ((A[r][i] % q) + q) % q;
+    }
     basis.push(row);
   }
 
+  // m rows: [ 0 | q*I_m | 0 ]
   for (let r = 0; r < m; r += 1) {
     const row = new Array<number>(dim).fill(0);
-    for (let c = 0; c < n; c += 1) {
-      row[c] = ((A[r][c] % q) + q) % q;
-    }
-    row[n + r] = 1;
+    row[n + r] = q;
     basis.push(row);
   }
 
+  // 1 row: [ 0 | b^T | 1 ]
   const last = new Array<number>(dim).fill(0);
-  for (let c = 0; c < n; c += 1) {
-    last[c] = ((b[c] ?? 0) % q + q) % q;
+  for (let r = 0; r < m; r += 1) {
+    last[n + r] = ((b[r] % q) + q) % q;
   }
   last[dim - 1] = 1;
   basis.push(last);
@@ -268,6 +286,7 @@ function checkCandidate(
   b: number[],
   q: number,
   candidate: number[],
+  sigma = 1,
 ): { ok: boolean; residualNormSq: number } {
   let residualNormSq = 0;
   for (let r = 0; r < A.length; r += 1) {
@@ -279,10 +298,22 @@ function checkCandidate(
     residualNormSq += e * e;
   }
   const avgSq = residualNormSq / Math.max(A.length, 1);
-  return { ok: avgSq <= 9, residualNormSq };
+  // Accept when the per-sample residual energy looks like genuine LWE noise.
+  // The true secret yields avgSq ~ sigma^2; a wrong secret yields ~ q^2/12 (a
+  // huge gap), so a 3-sigma RMS bound (9*sigma^2) cleanly separates them. The
+  // old fixed bound of 9 assumed sigma=1 and wrongly rejected the real secret
+  // whenever sigma was raised past ~3, reporting success as failure.
+  const s = Math.max(sigma, 1);
+  return { ok: avgSq <= 9 * s * s, residualNormSq };
 }
 
-function bruteForceRecover(A: number[][], b: number[], q: number, n: number): number[] | null {
+function bruteForceRecover(
+  A: number[][],
+  b: number[],
+  q: number,
+  n: number,
+  sigma = 1,
+): number[] | null {
   if (n > 8) {
     return null;
   }
@@ -292,7 +323,7 @@ function bruteForceRecover(A: number[][], b: number[], q: number, n: number): nu
 
   const rec = (idx: number): void => {
     if (idx === n) {
-      const check = checkCandidate(A, b, q, cur);
+      const check = checkCandidate(A, b, q, cur, sigma);
       if (check.residualNormSq < bestScore) {
         bestScore = check.residualNormSq;
         best = cur.slice();
@@ -309,7 +340,7 @@ function bruteForceRecover(A: number[][], b: number[], q: number, n: number): nu
   if (!best) {
     return null;
   }
-  const valid = checkCandidate(A, b, q, best);
+  const valid = checkCandidate(A, b, q, best, sigma);
   return valid.ok ? best : null;
 }
 
@@ -323,6 +354,7 @@ function recoverFromShortVector(
   b: number[],
   q: number,
   n: number,
+  sigma = 1,
 ): number[] | null {
   const tail = shortVec[shortVec.length - 1];
   if (Math.abs(tail) !== 1) {
@@ -338,7 +370,7 @@ function recoverFromShortVector(
   let best: number[] | null = null;
   let bestScore = Number.POSITIVE_INFINITY;
   for (const cand of candidates) {
-    const check = checkCandidate(A, b, q, cand);
+    const check = checkCandidate(A, b, q, cand, sigma);
     if (check.residualNormSq < bestScore) {
       best = cand;
       bestScore = check.residualNormSq;
@@ -351,48 +383,79 @@ function recoverFromShortVector(
   return best;
 }
 
-export function attackLWE(
-  A: number[][],
-  b: number[],
-  q: number,
-  n: number,
-): {
+export interface LWEAttackResult {
   success: boolean;
   recovered: number[] | null;
   shortVec: Vec | null;
   recoverMethod: 'short-vector' | 'bruteforce' | 'none';
-} {
-  if (n >= 20) {
-    return { success: false, recovered: null, shortVec: null, recoverMethod: 'none' };
-  }
+}
 
-  const lattice = buildLWELattice(A, b, q);
-  const reduced = lllReduce(lattice).reducedBasis;
+/**
+ * Recover the LWE secret from an ALREADY-REDUCED embedding basis. Kept separate
+ * from the reduction step so the UI can run its chosen reduction (BKZ-beta) once
+ * and recover from that exact basis -- otherwise the beta slider would be cosmetic,
+ * since a hidden re-run of plain LLL would decide success.
+ */
+export function recoverFromReducedBasis(
+  reduced: Basis,
+  A: number[][],
+  b: number[],
+  q: number,
+  n: number,
+  sigma = 1,
+): LWEAttackResult {
+  // The genuine lattice attack: among the reduced vectors, the LWE secret rides
+  // on the embedding-shaped one (last coordinate +-1, encoding (-s, e, 1)). Scan
+  // every candidate shortest-first so a near-shortest match is not missed when
+  // the globally shortest vector happens to lie outside the embedding coset.
+  const candidates = reduced
+    .map((v) => ({ v: v.slice(), ns: dot(v, v) }))
+    .filter((c) => c.ns > 0)
+    .sort((a, b2) => a.ns - b2.ns);
 
-  let shortVec: Vec | null = null;
-  let shortNormSq = Number.POSITIVE_INFINITY;
-  for (const v of reduced) {
-    const ns = dot(v, v);
-    if (ns > 0 && ns < shortNormSq) {
-      shortNormSq = ns;
-      shortVec = v.slice();
+  // Report the overall shortest vector for the norm-gap meter regardless of
+  // whether recovery succeeds, so the UI can show how close reduction got.
+  const shortVec: Vec | null = candidates.length > 0 ? candidates[0]!.v.slice() : null;
+
+  for (const c of candidates) {
+    if (Math.abs(c.v[c.v.length - 1]) !== 1) {
+      continue;
     }
-  }
-
-  if (shortVec) {
-    const recoveredFromShort = recoverFromShortVector(shortVec, A, b, q, n);
+    const recoveredFromShort = recoverFromShortVector(c.v, A, b, q, n, sigma);
     if (recoveredFromShort) {
-      const check = checkCandidate(A, b, q, recoveredFromShort);
+      const check = checkCandidate(A, b, q, recoveredFromShort, sigma);
       if (check.ok) {
-        return { success: true, recovered: recoveredFromShort, shortVec, recoverMethod: 'short-vector' };
+        return { success: true, recovered: recoveredFromShort, shortVec: c.v, recoverMethod: 'short-vector' };
       }
     }
   }
 
-  const recovered = bruteForceRecover(A, b, q, n);
+  const recovered = bruteForceRecover(A, b, q, n, sigma);
   if (!recovered) {
     return { success: false, recovered: null, shortVec, recoverMethod: 'none' };
   }
 
   return { success: true, recovered, shortVec, recoverMethod: 'bruteforce' };
+}
+
+/**
+ * Convenience end-to-end attack: build the embedding, reduce it with `beta`
+ * (default 2 == LLL), then recover. The UI passes the user's chosen beta so a
+ * larger block size produces a genuinely stronger reduction.
+ */
+export function attackLWE(
+  A: number[][],
+  b: number[],
+  q: number,
+  n: number,
+  sigma = 1,
+  beta = 2,
+): LWEAttackResult {
+  if (n >= 20) {
+    return { success: false, recovered: null, shortVec: null, recoverMethod: 'none' };
+  }
+
+  const lattice = buildLWELattice(A, b, q);
+  const reduced = beta > 2 ? bkzReduce(lattice, beta).reducedBasis : lllReduce(lattice).reducedBasis;
+  return recoverFromReducedBasis(reduced, A, b, q, n, sigma);
 }

@@ -28,7 +28,9 @@ const files = walk(root).filter((p) => {
   if (!/\.(ts|js|mjs|css|html|md)$/i.test(p)) {
     return false;
   }
-  return !p.endsWith('scripts/guardrails.mjs');
+  // Normalize separators so the self-exclusion matches on Windows too, where
+  // walk() yields backslash paths and 'scripts/guardrails.mjs' never would.
+  return !p.replace(/\\/g, '/').endsWith('scripts/guardrails.mjs');
 });
 
 for (const file of files) {
