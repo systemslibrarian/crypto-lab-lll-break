@@ -10,13 +10,44 @@ This demo shows LLL lattice reduction and toy BKZ reduction on Learning With Err
 - Explaining LLL and BKZ mechanics to students or engineers. Step traces and block-improvement logs show what each reduction phase actually changes.
 - Comparing toy insecure settings against Kyber-like settings. The same pipeline can be run at small and large parameters to show where attacks stop being effective.
 - Demonstrating how primal LWE embeddings are constructed. The matrix and reduction output are shown directly so learners can inspect the attack surface.
-- Not for real-world security assessment. This browser implementation is intentionally simplified and does not replace specialized lattice estimators or high-performance reduction libraries.
+- Do NOT use it for real-world security assessment. This browser implementation is intentionally simplified and does not replace specialized lattice estimators or high-performance reduction libraries.
 
 ## Live Demo
 
-https://systemslibrarian.github.io/crypto-lab-lll-break/
+**[systemslibrarian.github.io/crypto-lab-lll-break](https://systemslibrarian.github.io/crypto-lab-lll-break/)**
 
-The live app lets you step through LLL, inspect Gram-Schmidt/Lovasz behavior, generate toy LWE instances, and run LLL/BKZ-based recovery attempts. It does not perform encryption/decryption; it demonstrates reduction-and-recovery attack dynamics for educational analysis. Controls include lattice dimension presets, delta, LWE parameters (`n`, `q`, `sigma`), and BKZ block size (`beta`).
+The live app lets you step through LLL, inspect Gram-Schmidt/Lovász behavior, generate toy LWE instances, and run LLL/BKZ-based recovery attempts. It does not perform encryption/decryption; it demonstrates reduction-and-recovery attack dynamics for educational analysis. Controls include lattice dimension presets, delta, LWE parameters (`n`, `q`, `sigma`), and BKZ block size (`beta`).
+
+## What Can Go Wrong
+
+- **Under-parameterized LWE** — a small dimension `n`, small modulus `q`, or low noise `sigma` lets LLL/BKZ recover the secret quickly. Security comes from the combination of parameters, not any single knob.
+- **Mistaking LLL for the real attack** — LLL only guarantees an exponential approximation factor; real cryptanalysis uses BKZ with a large block size `beta`, and cost is measured with a lattice estimator, not one LLL run.
+- **Too little noise** — if the error is tiny relative to `q`, the embedded unique-shortest-vector gap is large and even weak reduction finds the secret.
+- **Treating a browser toy as an estimator** — production parameter choices need vetted tooling (the lattice estimator, sieving libraries), not a simplified in-browser reducer.
+- **Assuming "post-quantum" means "unbreakable"** — lattice schemes are only as strong as their parameters; the lesson here is that bad parameters fall to ordinary classical reduction.
+
+## Real-World Usage
+
+- **PQC parameter selection** — Kyber / ML-KEM, Dilithium / ML-DSA, and Falcon parameters are chosen so the best known BKZ attack costs at least the target security level.
+- **The lattice estimator** — the standard tool (Albrecht et al.) models exactly this reduce-and-recover attack to price LWE and NTRU instances during standardization.
+- **BKZ and SVP records** — progressive BKZ, BKZ 2.0, and lattice sieving (G6K) drive the Darmstadt SVP/LWE challenges that calibrate real-world attack cost.
+- **LLL beyond LWE** — Coppersmith's method (RSA small-root and Håstad attacks), knapsack and early lattice-scheme breaks, and integer-relation detection all rely on LLL reduction.
+
+## How to Run Locally
+
+```bash
+git clone https://github.com/systemslibrarian/crypto-lab-lll-break
+cd crypto-lab-lll-break
+npm install
+npm run dev
+```
+
+## Related Demos
+
+- [crypto-lab-nonce-lattice](https://systemslibrarian.github.io/crypto-lab-nonce-lattice/) — lattice attack recovering ECDSA keys from biased nonces (the Hidden Number Problem).
+- [crypto-lab-lwe-hints](https://systemslibrarian.github.io/crypto-lab-lwe-hints/) — how side-channel "hints" weaken an LWE instance.
+- [crypto-lab-kyber-vault](https://systemslibrarian.github.io/crypto-lab-kyber-vault/) — ML-KEM (Kyber), the lattice KEM whose parameters this attack pressures.
+- [crypto-lab-frodo-vault](https://systemslibrarian.github.io/crypto-lab-frodo-vault/) — FrodoKEM, plain (unstructured) LWE for comparison.
 
 ## Exhibits and Learning Goals
 
@@ -39,37 +70,8 @@ Classroom-ready materials live in [`docs/`](docs/):
 - [Worksheet](docs/worksheet.md) and [answer key](docs/answer-key.md).
 - Timed labs: [30-min](docs/lab-30-min.md), [60-min](docs/lab-60-min.md), [90-min](docs/lab-90-min.md).
 
-## Accuracy Boundaries
-
-- **Real:** the LLL reduction, the unimodular-transform invariant, the primal/Kannan embedding, exact small-block SVP enumeration, and short-vector secret recovery.
-- **Simplified:** toy dimensions, plain floating-point GSO, no enumeration pruning or projected-block handling, and an intuition-only cost model (`cost ~ 2^(0.292*beta)`).
-- **Do not infer:** that LLL/BKZ break real Kyber, or that the brute-force "teaching baseline" is a lattice attack. For real analysis use a lattice estimator (Albrecht et al.) and a production reducer (fplll, G6K). See [docs/model-limitations.md](docs/model-limitations.md).
-
-## References and Further Reading
-
-A short, tiered path (each line says why it is worth reading):
-
-1. **LLL intuition** — any "LLL for beginners" lattice-reduction notes: build a mental model of size reduction and swaps before the formal proofs.
-2. **LWE background** — Regev, *On Lattices, Learning with Errors...*: the foundational hardness assumption these schemes rest on.
-3. **Primal/Kannan embedding** — surveys of primal lattice attacks on LWE: explains why `(-s, e, 1)` is short and how the embedding is built.
-4. **BKZ and cost** — Chen-Nguyen *BKZ 2.0* and the root-Hermite-factor literature: how block size sets reduction strength and attack cost.
-5. **Estimators and libraries** — the Albrecht et al. lattice estimator, and `fplll` / `G6K`: the tools used for actual parameter security, not a browser toy.
-
-## How to Run Locally
-
-```bash
-git clone https://github.com/systemslibrarian/crypto-lab-lll-break
-cd crypto-lab-lll-break
-npm install
-npm run dev
-```
-
-No environment variables are required.
-
-## Part of the Crypto-Lab Suite
-
-One of 60+ live browser demos at [systemslibrarian.github.io/crypto-lab](https://systemslibrarian.github.io/crypto-lab/) — spanning Atbash (600 BCE) through NIST FIPS 203/204/205 (2024).
-
 ---
 
-*"Whether you eat or drink, or whatever you do, do all to the glory of God." — 1 Corinthians 10:31*
+*One of 60+ browser demos in the [Crypto Lab](https://crypto-lab.systemslibrarian.dev/) suite.*
+
+*"So whether you eat or drink or whatever you do, do it all for the glory of God." — 1 Corinthians 10:31*
