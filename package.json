@@ -11,11 +11,12 @@
     "verify:algo": "tsx scripts/verify.ts",
     "verify:guardrails": "node scripts/guardrails.mjs",
     "verify": "npm run verify:algo && npm run verify:guardrails",
-    "test:ui": "playwright test"
+    "test:ui": "playwright test --config playwright.config.ts",
+    "test:a11y": "playwright test --config playwright.a11y.config.ts"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.10.0",
-    "@playwright/test": "^1.49.0",
+    "@playwright/test": "^1.61.1",
     "gh-pages": "^6.3.0",
     "tsx": "^4.21.0",
     "typescript": "~6.0.2",
