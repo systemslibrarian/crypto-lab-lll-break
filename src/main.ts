@@ -84,7 +84,7 @@ app.innerHTML = `
         <input id="gso-a22" type="number" inputmode="numeric" value="2" />
       </div>
       <button id="gso-next" type="button" class="btn">Next</button>
-      <pre id="gso-text" class="mono panel"></pre>
+      <pre id="gso-text" class="mono panel" tabindex="0" role="region" aria-label="Gram-Schmidt output"></pre>
       <p class="panel">
         Gram-Schmidt vectors and mu coefficients are floating point. Basis vectors remain exact integers.
       </p>
@@ -130,8 +130,8 @@ app.innerHTML = `
       <canvas id="defect-chart" width="420" height="140" role="img" aria-label="Orthogonality defect chart"></canvas>
     </div>
     <div>
-      <div id="lll-log" class="panel mono log" aria-live="polite"></div>
-      <pre id="lll-metrics" class="panel mono"></pre>
+      <div id="lll-log" class="panel mono log" aria-live="polite" tabindex="0" role="region" aria-label="LLL step log"></div>
+      <pre id="lll-metrics" class="panel mono" tabindex="0" role="region" aria-label="LLL metrics"></pre>
     </div>
   </div>
   <details class="selfcheck">
@@ -177,7 +177,7 @@ app.innerHTML = `
       <div id="lwe-meter-fill" class="lwe-meter-fill"></div>
     </div>
   </div>
-  <pre id="lwe-output" class="panel mono" aria-live="polite"></pre>
+  <pre id="lwe-output" class="panel mono" aria-live="polite" tabindex="0" role="region" aria-label="LWE attack output"></pre>
   <details class="selfcheck">
     <summary>Can you answer this now?</summary>
     <p>Q: The output says "Lattice attack result: FAILED" but "Teaching baseline: brute force found the secret". Did you break LWE? A: No. Brute force just enumerated every candidate secret - it is exhaustive search, not lattice reduction, and it only works because the toy secret space is tiny. A genuine lattice break requires reduction to expose the (-s, e, +-1) vector. Counting the baseline as a break is exactly the mistake this exhibit guards against.</p>
@@ -189,8 +189,8 @@ app.innerHTML = `
   <p class="objective"><strong>Goal:</strong> explain why tiny parameters fall to LLL/BKZ while Kyber-like dimensions push the required block size - and the cost - out of reach.</p>
   <label>n <input id="explore-n" type="range" min="4" max="256" value="8" /></label>
   <div class="grid two">
-    <pre id="explore-left" class="panel mono"></pre>
-    <pre id="explore-right" class="panel mono"></pre>
+    <pre id="explore-left" class="panel mono" tabindex="0" role="region" aria-label="Parameter explorer, left column"></pre>
+    <pre id="explore-right" class="panel mono" tabindex="0" role="region" aria-label="Parameter explorer, right column"></pre>
   </div>
   <canvas id="threshold-chart" width="900" height="260" role="img" aria-label="Security threshold chart"></canvas>
   <p>
