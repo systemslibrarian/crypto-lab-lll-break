@@ -13,12 +13,20 @@ const theme = document.documentElement.getAttribute('data-theme') ?? 'dark';
 
 app.innerHTML = `
 <a class="skip-link" href="#main-content">Skip to main content</a>
-<div class="topbar">
-  <h1>crypto-lab-lll-break</h1>
-  <button id="theme-toggle" type="button" class="theme-toggle" aria-label="${theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}">${theme === 'dark' ? '🌙' : '☀️'}</button>
-</div>
+<button id="theme-toggle" type="button" class="theme-toggle" aria-label="${theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}">${theme === 'dark' ? '🌙' : '☀️'}</button>
 
 <main id="main-content">
+<header class="cl-hero">
+  <div class="cl-hero-main">
+    <h1 class="cl-hero-title">LLL / BKZ</h1>
+    <p class="cl-hero-sub">Lattice reduction · LWE reduce-and-recover</p>
+    <p class="cl-hero-desc">Step through LLL and BKZ basis reduction, then watch them break a toy Learning With Errors instance by surfacing the short (-s, e, ±1) vector from a primal embedding.</p>
+  </div>
+  <aside class="cl-hero-why" aria-label="Why it matters">
+    <span class="cl-hero-why-label">WHY IT MATTERS</span>
+    <p class="cl-hero-why-text">LWE is the hardness assumption under post-quantum schemes like Kyber and Dilithium. Reduction breaks tiny parameters but not real ones, so lattice security is a function of parameter choice, not an absolute.</p>
+  </aside>
+</header>
 <section class="exhibit" id="lab-controls" aria-labelledby="lab-controls-title">
   <h2 id="lab-controls-title">Reproducible Labs</h2>
   <p class="objective"><strong>Goal:</strong> make any run repeatable. Enter a numeric seed to make all randomness deterministic - the same seed and parameters always produce the same instance - or leave it blank for fresh crypto-random exploration. "Copy lab link" puts the whole setup in the URL so every student opens the identical lab.</p>
