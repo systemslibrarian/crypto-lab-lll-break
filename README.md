@@ -53,11 +53,13 @@ npm run dev
 
 | Exhibit | Topic | What you should be able to say afterward |
 | --- | --- | --- |
-| 1 | What Is a Lattice? | Many bases generate the same lattice; the determinant is invariant under unimodular changes. |
+| 1 | What Is a Lattice? | Many bases generate the same lattice; the determinant is invariant under unimodular changes. Opens with a plain-language primer (lattice / basis / "many bases, one lattice") before any jargon, and the determinant label carries a hover/click tooltip: "area of one grid cell — it never changes no matter which basis you pick." |
 | 2 | Gram-Schmidt | Compute `b*` and `mu`, and evaluate the Lovasz condition from them. |
-| 3 | LLL Step-by-Step | Predict size-reduce / swap / advance, and see `reducedBasis = U * original` with `det(U) = +-1` proving the lattice is unchanged. |
-| 4 | Break a Toy LWE Instance | Derive why `(-s, e, +-1)` is short in the primal embedding, and recover `s` by genuine reduction — never confusing it with the brute-force baseline. |
-| 5 | Parameter Explorer | Explain why tiny parameters fall to LLL/BKZ while Kyber-like dimensions push the required `beta` (and cost) out of reach. |
+| 3 | LLL Step-by-Step | Predict size-reduce / swap / advance, and see `reducedBasis = U * original` with `det(U) = +-1` proving the lattice is unchanged. The green (current) basis is animated so you watch the vectors shrink and re-order per step. A `delta` vs `beta` callout links this exhibit's LLL knob to Exhibit 4's BKZ knob. |
+| 4 | Break a Toy LWE Instance | Derive why `(-s, e, +-1)` is short in the primal embedding, and recover `s` by genuine reduction — never confusing it with the brute-force baseline. A color-coded block view of the embedding matrix (secret / error-q-ary / embed columns) animates the bottom-row-minus-`sum(s_i·row_i)` cancellation so the short vector visibly emerges; the norm-gap confidence meter carries a "what am I looking at" caption. |
+| 5 | Parameter Explorer | Explain why tiny parameters fall to LLL/BKZ while Kyber-like dimensions push the required `beta` (and cost) out of reach. The `n≈50` line and `beta ≈ n/(2·log2(q/sigma))` formula are labelled on-screen as a rough teaching model (not a security estimate — real numbers come from the lattice estimator), with a one-line derivation tooltip for `beta`. |
+
+Every canvas carries a persistent legend (red = your input basis, green = current/reduced basis, dashed cyan = Gram-Schmidt directions, dots = lattice points) so the visuals read without reverse-engineering the code.
 
 A **Reproducible Labs** panel adds a seed (deterministic runs), shareable lab links, and named canonical labs; a **Challenges** section offers predict-then-reveal exercises.
 

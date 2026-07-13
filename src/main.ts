@@ -52,10 +52,23 @@ app.innerHTML = `
 <section class="exhibit" id="exhibit-1" aria-labelledby="exhibit-1-title">
   <h2 id="exhibit-1-title">Exhibit 1 - What Is a Lattice?</h2>
   <p class="objective"><strong>Goal:</strong> see that many different bases generate the same lattice, and that the determinant (fundamental-cell area) is invariant under unimodular basis changes.</p>
+  <div class="primer">
+    <p class="primer-lead"><strong>New here? Start with this.</strong> A <em>lattice</em> is an evenly spaced grid of points that stretches out forever in every direction - think of every corner where the lines cross on a sheet of graph paper, but the grid can be tilted and stretched. Two arrows, the <em>basis</em>, describe the whole grid: stand at the origin, take any whole number of steps along the first arrow and any whole number along the second, and wherever you land is a lattice point.</p>
+    <p class="primer-lead">Here is the key idea the rest of this tour is built on: <strong>the same grid of points can be described by many different pairs of arrows</strong>. A short, tidy, near-perpendicular pair and a long, skewed, awkward pair can trace out the exact same dots. Reduction (Exhibits 3-4) is the art of trading an ugly basis for a tidy one <em>without moving a single point</em>. One quantity proves you never moved the grid: the <strong>determinant</strong> - the area of one grid cell. Try the sliders and the button below and watch that number refuse to change.</p>
+  </div>
   <div class="grid two">
     <div>
       <canvas id="lattice-canvas" width="500" height="400" role="img" aria-label="2D lattice canvas"></canvas>
-      <p class="mono" id="det-label"></p>
+      <p class="canvas-legend" aria-hidden="true">
+        <span class="lg lg-red">red</span> your input basis ·
+        <span class="lg lg-green">green</span> current basis ·
+        <span class="lg lg-dot">dots</span> lattice points
+      </p>
+      <p class="mono det-line">
+        <span id="det-label"></span>
+        <button type="button" id="det-help" class="info-dot" aria-label="What does the determinant mean?" title="Area of one grid cell - it never changes no matter which basis you pick.">i</button>
+      </p>
+      <p class="det-tip" id="det-tip" hidden>Determinant = area of one grid cell (the fundamental parallelogram). It never changes no matter which basis you pick for the same lattice - that is what makes it the invariant the whole tour relies on.</p>
       <p class="mono" id="same-lattice-label"></p>
     </div>
     <div>
@@ -99,6 +112,12 @@ app.innerHTML = `
     </div>
     <div>
       <canvas id="gso-canvas" width="500" height="360" role="img" aria-label="Gram-Schmidt visualization"></canvas>
+      <p class="canvas-legend" aria-hidden="true">
+        <span class="lg lg-red">red</span> input basis b1, b2 ·
+        <span class="lg lg-green">green</span> current basis ·
+        <span class="lg lg-cyan">dashed cyan</span> Gram-Schmidt directions b1*, b2* ·
+        <span class="lg lg-dot">dots</span> lattice points
+      </p>
     </div>
   </div>
   <details class="selfcheck">
@@ -135,6 +154,12 @@ app.innerHTML = `
   <div class="grid two">
     <div>
       <canvas id="lll-canvas" width="420" height="420" role="img" aria-label="LLL basis evolution canvas"></canvas>
+      <p class="canvas-legend" aria-hidden="true">
+        <span class="lg lg-red">red</span> input basis (fixed) ·
+        <span class="lg lg-green">green</span> current reduced basis ·
+        <span class="lg lg-cyan">dashed cyan</span> Gram-Schmidt directions ·
+        <span class="lg lg-dot">dots</span> lattice points
+      </p>
       <canvas id="defect-chart" width="420" height="140" role="img" aria-label="Orthogonality defect chart"></canvas>
     </div>
     <div>
@@ -169,6 +194,14 @@ app.innerHTML = `
       security claims.
     </p>
   </details>
+  <div class="callout-compare">
+    <strong>delta vs beta - the two reduction knobs, side by side.</strong>
+    <span class="mono">delta</span> (Exhibit 3) tunes how hard <em>LLL</em> tries: higher delta
+    demands a better-ordered basis and triggers more swaps.
+    <span class="mono">beta</span> (below) is how big a chunk <em>BKZ</em> solves exactly in each
+    block - <span class="mono">beta=2</span> is just LLL, and larger beta reaches shorter first
+    vectors on the same input. They are two points on one spectrum: reduction strength.
+  </div>
   <div class="controls-row">
     <label>n <input id="lwe-n" type="range" min="2" max="12" value="4" /></label>
     <label>q <input id="lwe-q" type="range" min="7" max="257" value="71" /></label>
@@ -183,6 +216,36 @@ app.innerHTML = `
     <div class="lwe-meter-head mono" id="lwe-meter-text">Norm-gap confidence: waiting for attack run.</div>
     <div class="lwe-meter-track" aria-hidden="true">
       <div id="lwe-meter-fill" class="lwe-meter-fill"></div>
+    </div>
+  </div>
+  <p class="meter-caption">
+    <strong>What am I looking at?</strong> This measures how close the shortest vector reduction
+    actually found is to the expected length of the target <span class="mono">(-s, e, 1)</span>
+    vector. <strong>100%</strong> means reduction surfaced something at or below the target length
+    (the secret is exposed); a lower number means the shortest vector is still that many times too
+    long, so the secret stays hidden. It is a continuous "how close did we get", not a pass/fail.
+  </p>
+  <div class="embed-viz" id="embed-viz">
+    <h3 class="embed-title">The embedding, by block <span class="embed-hint">(generate an instance to populate)</span></h3>
+    <p class="embed-caption">
+      Each row is a lattice generator. The columns split into three blocks:
+      <span class="blk-key blk-secret">secret block (n)</span>,
+      <span class="blk-key blk-error">error / q-ary block (m)</span>, and the
+      <span class="blk-key blk-embed">embed column (1)</span>. The bottom row is
+      <span class="blk-key blk-target">the target [0 | b | 1]</span>. The attack's whole idea:
+      take that bottom row and subtract s<sub>i</sub> times row i for every secret index i.
+      Everything in the error block collapses (mod q) down to the tiny error e, and the short
+      vector <strong>(-s, e, &plusmn;1)</strong> emerges - the secret, sitting right there in the
+      first block.
+    </p>
+    <div class="embed-grid-wrap" tabindex="0" role="region" aria-label="LWE embedding block matrix">
+      <table class="embed-grid" id="embed-grid" aria-live="polite">
+        <caption class="sr-only">Primal embedding lattice, columns grouped as secret, error/q-ary, and embed blocks</caption>
+      </table>
+    </div>
+    <div class="embed-controls">
+      <button id="embed-collapse" type="button" class="btn" disabled aria-describedby="embed-collapse-note">Show the short vector emerge</button>
+      <span id="embed-collapse-note" class="embed-collapse-note">Runs the bottom-row minus sum(s&middot;row) cancellation, one term at a time.</span>
     </div>
   </div>
   <pre id="lwe-output" class="panel mono" aria-live="polite" tabindex="0" role="region" aria-label="LWE attack output"></pre>
@@ -200,7 +263,24 @@ app.innerHTML = `
     <pre id="explore-left" class="panel mono" tabindex="0" role="region" aria-label="Parameter explorer, left column"></pre>
     <pre id="explore-right" class="panel mono" tabindex="0" role="region" aria-label="Parameter explorer, right column"></pre>
   </div>
-  <canvas id="threshold-chart" width="900" height="260" role="img" aria-label="Security threshold chart"></canvas>
+  <p class="heuristic-note">
+    <strong>Rough teaching model, not a security estimate.</strong> The dashed line at
+    <span class="mono">n&asymp;50</span> and the formula
+    <span class="mono">beta &asymp; n / (2&middot;log2(q/sigma))</span> are order-of-magnitude
+    intuition to show the <em>shape</em> of how cost climbs with dimension - not a real threshold.
+    Real numbers come from the
+    <a href="https://github.com/malb/lattice-estimator" target="_blank" rel="noopener">lattice estimator</a>,
+    which models sieving/BKZ cost far more carefully.
+    <button type="button" id="beta-help" class="info-dot" aria-label="Where does the beta formula come from?" title="beta grows with dimension n and shrinks as the noise-to-modulus ratio widens the unique-shortest-vector gap; log2(q/sigma) sizes that gap.">i</button>
+  </p>
+  <p class="det-tip" id="beta-tip" hidden>
+    Where the formula comes from: the primal embedding has a unique shortest vector whose gap over
+    the next-shortest scales with q/sigma (more headroom between noise and modulus = easier to
+    isolate). The block size beta needed to find it grows with the dimension n and shrinks as that
+    gap widens - hence beta &asymp; n / (2&middot;log2(q/sigma)). It is a back-of-envelope sizing,
+    deliberately dropping the constants and correction terms a real estimator keeps.
+  </p>
+  <canvas id="threshold-chart" width="900" height="260" role="img" aria-label="Security threshold chart: rough teaching model of how required BKZ block size and cost climb with dimension n"></canvas>
   <p>
     ML-KEM (Kyber), FrodoKEM, ML-DSA (Dilithium), and FALCON all rely on LLL/BKZ failing at chosen parameters.
   </p>
@@ -469,6 +549,21 @@ const unimodularChoices = [
   ],
 ] as const;
 
+function bindTipToggle(buttonId: string, tipId: string): void {
+  const btn = byId<HTMLButtonElement>(buttonId);
+  const tip = byId<HTMLElement>(tipId);
+  btn.addEventListener('click', () => {
+    const hidden = tip.hasAttribute('hidden');
+    if (hidden) tip.removeAttribute('hidden');
+    else tip.setAttribute('hidden', '');
+    btn.setAttribute('aria-expanded', hidden ? 'true' : 'false');
+  });
+  btn.setAttribute('aria-expanded', 'false');
+}
+
+bindTipToggle('det-help', 'det-tip');
+bindTipToggle('beta-help', 'beta-tip');
+
 byId<HTMLButtonElement>('same-lattice-btn').addEventListener('click', () => {
   const t = unimodularChoices[randInt(0, unimodularChoices.length - 1)]!;
   const b1 = latticeBasis[0];
@@ -611,9 +706,65 @@ function drawDefectChart(values: number[]): void {
   ctx.stroke();
 }
 
-function renderLLLState(): void {
+const prefersReducedMotion =
+  typeof window.matchMedia === 'function' &&
+  window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+let lllAnimFrame: number | null = null;
+
+/**
+ * Tween the green (current) basis from `from` to `to` so the learner literally
+ * watches the vectors shrink and re-order during a size-reduce or swap, instead
+ * of them teleporting. Purely cosmetic: the underlying integer basis is never
+ * interpolated, only the drawn arrows, so no crypto is faked.
+ */
+function animateBasisTransition(
+  from: Basis,
+  to: Basis,
+  gsoTo: Vec[],
+  label: string,
+): void {
+  if (lllAnimFrame !== null) {
+    window.cancelAnimationFrame(lllAnimFrame);
+    lllAnimFrame = null;
+  }
+  if (prefersReducedMotion || from.length !== to.length) {
+    drawBasisScene(lllCanvas, lllOriginal, to, gsoTo, label);
+    return;
+  }
+  const dim = to[0].length;
+  const start = performance.now();
+  const duration = 320;
+  const tick = (now: number): void => {
+    const raw = Math.min(1, (now - start) / duration);
+    const t = raw < 0.5 ? 2 * raw * raw : 1 - Math.pow(-2 * raw + 2, 2) / 2; // ease-in-out
+    const lerped: Basis = to.map((toVec, i) => {
+      const fromVec = from[i] ?? toVec;
+      const out = new Array<number>(dim);
+      for (let c = 0; c < dim; c += 1) {
+        out[c] = fromVec[c] + (toVec[c] - fromVec[c]) * t;
+      }
+      return out;
+    });
+    // GSO directions only make sense at the settled basis, so fade them in near
+    // the end rather than interpolating an intermediate orthogonalization.
+    drawBasisScene(lllCanvas, lllOriginal, lerped, raw > 0.75 ? gsoTo : undefined, label);
+    if (raw < 1) {
+      lllAnimFrame = window.requestAnimationFrame(tick);
+    } else {
+      lllAnimFrame = null;
+      drawBasisScene(lllCanvas, lllOriginal, to, gsoTo, label);
+    }
+  };
+  lllAnimFrame = window.requestAnimationFrame(tick);
+}
+
+function renderLLLState(animate = false): void {
   const step = lllSteps[Math.min(lllCursor, lllSteps.length - 1)]!;
-  drawBasisScene(lllCanvas, lllOriginal, step.after, step.gsoAfter, step.description);
+  if (animate && step.before.length === step.after.length) {
+    animateBasisTransition(step.before, step.after, step.gsoAfter, step.description);
+  } else {
+    drawBasisScene(lllCanvas, lllOriginal, step.after, step.gsoAfter, step.description);
+  }
 
   lllLog.textContent = lllSteps
     .slice(0, lllCursor + 1)
@@ -665,7 +816,7 @@ function resetLLL(): void {
 byId<HTMLButtonElement>('lll-step').addEventListener('click', () => {
   if (lllCursor < lllSteps.length - 1) {
     lllCursor += 1;
-    renderLLLState();
+    renderLLLState(true);
   }
 });
 
@@ -682,7 +833,7 @@ byId<HTMLButtonElement>('lll-auto').addEventListener('click', () => {
       return;
     }
     lllCursor += 1;
-    renderLLLState();
+    renderLLLState(true);
   }, 500);
 });
 
@@ -712,6 +863,9 @@ const lweOutput = byId<HTMLPreElement>('lwe-output');
 const lweProgress = byId<HTMLProgressElement>('lwe-progress');
 const lweMeterText = byId<HTMLDivElement>('lwe-meter-text');
 const lweMeterFill = byId<HTMLDivElement>('lwe-meter-fill');
+const embedGrid = byId<HTMLTableElement>('embed-grid');
+const embedTitleHint = document.querySelector<HTMLSpanElement>('.embed-hint');
+const embedCollapseBtn = byId<HTMLButtonElement>('embed-collapse');
 // Keep the parameters the instance was generated with. The attack must use these,
 // not the live slider values -- moving a slider after Generate would otherwise
 // build the embedding with a mismatched q/n while b still encodes the old ones,
@@ -738,6 +892,166 @@ function updateLWEMeter(
     lweMeterFill.style.background = 'linear-gradient(90deg, #ff3366, #ff6b8f)';
   }
   lweMeterText.textContent = `Norm-gap confidence: ${clamped.toFixed(1)}% - ${message}`;
+}
+
+// ---- Exhibit 4 embedding block visualization + cancellation animation ----
+// State captured at Generate time so the "show the short vector emerge" button
+// can replay the exact bottom-row minus sum(s_i * row_i) cancellation on the
+// same instance the attack ran on. Nothing here is faked: the collapsed row is
+// recomputed from the real rows and the real (hidden) secret, and it must equal
+// (-s, e, +-1) for a correctly built embedding.
+interface EmbedVizState {
+  n: number;
+  m: number;
+  q: number;
+  lattice: number[][];
+  secret: number[];
+}
+let embedVizState: EmbedVizState | null = null;
+
+function centeredModDisplay(x: number, q: number): number {
+  const r = ((x % q) + q) % q;
+  return r > q / 2 ? r - q : r;
+}
+
+function blockClassForCol(col: number, n: number, m: number): string {
+  if (col < n) return 'blk-secret';
+  if (col < n + m) return 'blk-error';
+  return 'blk-embed';
+}
+
+function renderEmbedGrid(state: EmbedVizState): void {
+  const { n, m, lattice } = state;
+  const dim = n + m + 1;
+  // Cap displayed columns so a large instance stays readable; keep first secret
+  // cols, a slice of error cols, and the embed col, with an ellipsis marker.
+  const maxCols = 12;
+  const colIdx: number[] = [];
+  if (dim <= maxCols) {
+    for (let c = 0; c < dim; c += 1) colIdx.push(c);
+  } else {
+    for (let c = 0; c < Math.min(n, 5); c += 1) colIdx.push(c);
+    colIdx.push(-1); // ellipsis
+    for (let c = n; c < n + Math.min(m, 4); c += 1) colIdx.push(c);
+    if (n + Math.min(m, 4) < n + m) colIdx.push(-1);
+    colIdx.push(dim - 1);
+  }
+
+  const headParts = colIdx.map((c) => {
+    if (c === -1) return '<th class="blk-ellipsis" scope="col">…</th>';
+    const cls = blockClassForCol(c, n, m);
+    let name: string;
+    if (c < n) name = `s${c + 1}`;
+    else if (c < n + m) name = `e${c - n + 1}`;
+    else name = 'k';
+    return `<th class="${cls}" scope="col">${name}</th>`;
+  });
+  const thead = `<thead><tr><th scope="col" class="embed-rowlabel">row</th>${headParts.join('')}</tr></thead>`;
+
+  const rowLabel = (r: number): string => {
+    if (r < n) return `b${r + 1}`;
+    if (r < n + m) return `q${r - n + 1}`;
+    return 'target';
+  };
+  const rowClass = (r: number): string => (r === dim - 1 ? 'embed-targetrow' : '');
+
+  const bodyRows = lattice
+    .map((row, r) => {
+      const cells = colIdx
+        .map((c) => {
+          if (c === -1) return '<td class="blk-ellipsis">…</td>';
+          const cls = blockClassForCol(c, n, m);
+          return `<td class="${cls}" data-col="${c}">${row[c]}</td>`;
+        })
+        .join('');
+      return `<tr class="${rowClass(r)}" data-row="${r}"><th scope="row" class="embed-rowlabel">${rowLabel(r)}</th>${cells}</tr>`;
+    })
+    .join('');
+
+  embedGrid.innerHTML = `${thead}<tbody id="embed-tbody">${bodyRows}</tbody>`;
+  embedGrid.dataset.cols = colIdx.join(',');
+}
+
+/**
+ * Replay the cancellation that surfaces the short vector. We start from a copy of
+ * the target row [0 | b | 1], then subtract s_i * row_i one secret index at a
+ * time, re-rendering a "= (running result)" row so the learner watches the error
+ * block reduce mod q and the secret block fill with -s_i. The final row must be
+ * (-s, e, +-1); we verify that against the honest error before celebrating.
+ */
+async function animateEmbeddingCollapse(state: EmbedVizState): Promise<void> {
+  const { n, m, q, lattice, secret } = state;
+  const dim = n + m + 1;
+  const colIdx = (embedGrid.dataset.cols ?? '')
+    .split(',')
+    .map((x) => Number(x));
+
+  const target = lattice[dim - 1].slice();
+  const running = target.slice();
+
+  const tbody = document.getElementById('embed-tbody');
+  if (!tbody) return;
+
+  // Insert a live "result" row under the table if not present.
+  let resultRow = document.getElementById('embed-result-row') as HTMLTableRowElement | null;
+  const buildResultCells = (vals: number[], highlightSecret: boolean): string =>
+    colIdx
+      .map((c) => {
+        if (c === -1) return '<td class="blk-ellipsis">…</td>';
+        const base = blockClassForCol(c, n, m);
+        const disp = c >= n && c < n + m ? centeredModDisplay(vals[c], q) : vals[c];
+        const hot = highlightSecret && c < n ? ' emerge-hot' : '';
+        return `<td class="${base}${hot}" data-col="${c}">${disp}</td>`;
+      })
+      .join('');
+
+  const renderResult = (vals: number[], label: string, done: boolean): void => {
+    const cells = buildResultCells(vals, done);
+    const cls = done ? 'embed-resultrow embed-resultrow-done' : 'embed-resultrow';
+    const html = `<tr id="embed-result-row" class="${cls}"><th scope="row" class="embed-rowlabel">${label}</th>${cells}</tr>`;
+    if (resultRow) {
+      resultRow.outerHTML = html;
+    } else {
+      tbody.insertAdjacentHTML('beforeend', html);
+    }
+    resultRow = document.getElementById('embed-result-row') as HTMLTableRowElement | null;
+  };
+
+  const wait = (ms: number) =>
+    new Promise<void>((res) => window.setTimeout(res, prefersReducedMotion ? 0 : ms));
+
+  embedCollapseBtn.disabled = true;
+  renderResult(running, 'target', false);
+  await wait(450);
+
+  for (let i = 0; i < n; i += 1) {
+    // running <- running - s_i * row_i  (row_i is lattice row i)
+    for (let c = 0; c < dim; c += 1) {
+      running[c] -= secret[i] * lattice[i][c];
+    }
+    // Highlight the row being subtracted.
+    const src = tbody.querySelector(`tr[data-row="${i}"]`);
+    src?.classList.add('embed-subtracting');
+    renderResult(running, `- ${secret[i]}·b${i + 1}`, false);
+    await wait(prefersReducedMotion ? 0 : 520);
+    src?.classList.remove('embed-subtracting');
+  }
+
+  // Verify the collapse produced (-s, e, +-1) before labelling it as such.
+  const embedCoord = running[dim - 1];
+  const secretBlockOk = secret.every((s, i) => running[i] === -s);
+  const errorBlock = running.slice(n, n + m).map((x) => centeredModDisplay(x, q));
+  const label = secretBlockOk && Math.abs(embedCoord) === 1 ? '(-s, e, +1)' : '= result';
+  renderResult(running, label, true);
+  embedCollapseBtn.disabled = false;
+
+  // Void the unused var lint by referencing errorBlock in a title update.
+  const hint = embedTitleHint;
+  if (hint) {
+    hint.textContent = secretBlockOk
+      ? ` collapsed: secret block is -s, error block is e = [${errorBlock.join(', ')}]`
+      : ' (collapse did not match -s; check parameters)';
+  }
 }
 
 function estimateTargetNorm(n: number, m: number, sigma: number): number {
@@ -814,7 +1128,20 @@ byId<HTMLButtonElement>('lwe-generate').addEventListener('click', async () => {
     fmtMatrix(lattice, 5),
   ].join('\n');
   updateLWEMeter(0, 'instance generated, run attack to measure gap.', 'warn');
+  // Populate the color-coded block visualization from this exact instance.
+  embedVizState = { n, m, q, lattice, secret: lweInstance.secret.slice() };
+  renderEmbedGrid(embedVizState);
+  embedCollapseBtn.disabled = false;
+  if (embedTitleHint) {
+    embedTitleHint.textContent = ` (${lattice.length}x${lattice[0].length}; press "Show the short vector emerge")`;
+  }
   lweProgress.value = 40;
+});
+
+embedCollapseBtn.addEventListener('click', () => {
+  if (embedVizState) {
+    void animateEmbeddingCollapse(embedVizState);
+  }
 });
 
 byId<HTMLButtonElement>('lwe-attack').addEventListener('click', () => {
@@ -976,7 +1303,7 @@ function drawThresholdChart(nNow: number): void {
   ctx.stroke();
   ctx.fillStyle = '#ccc';
   ctx.font = '12px "JetBrains Mono", monospace';
-  ctx.fillText('Security threshold ~ n=50', xThreshold + 8, 34);
+  ctx.fillText('n~50 (rough teaching heuristic, not a security boundary)', xThreshold + 8, 34);
 }
 
 function renderEx5(): void {
