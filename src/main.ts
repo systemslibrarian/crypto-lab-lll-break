@@ -264,10 +264,17 @@ app.innerHTML = `
     <pre id="explore-right" class="panel mono" tabindex="0" role="region" aria-label="Parameter explorer, right column"></pre>
   </div>
   <p class="heuristic-note">
-    <strong>Rough teaching model, not a security estimate.</strong> The dashed line at
-    <span class="mono">n&asymp;50</span> and the formula
-    <span class="mono">beta &asymp; n / (2&middot;log2(q/sigma))</span> are order-of-magnitude
-    intuition to show the <em>shape</em> of how cost climbs with dimension - not a real threshold.
+    <strong>Rough teaching model, not a security estimate - and it does not extrapolate.</strong>
+    The formula <span class="mono">beta &asymp; n / (2&middot;log2(q/sigma))</span> only carries the
+    <em>shape</em> of the dependence: beta rises with dimension and falls as the noise-to-modulus
+    gap widens. Its absolute values are wrong outside the toy regime, and badly so. Slide n to 256
+    with Kyber's q and it returns <span class="mono">beta&asymp;11</span>, cost
+    <span class="mono">~2^3</span>. Published core-SVP estimates for ML-KEM-512 are
+    <span class="mono">beta</span> in the low 400s and cost <span class="mono">~2^117</span> - about
+    37x on beta, and the difference between "trivial" and "out of reach". The
+    <span class="mono">n&asymp;50</span> marker on the chart is not derived from this formula either;
+    it is a hand-placed reminder of roughly where a browser-scale reduction stops finding the target,
+    not a security boundary.
     Real numbers come from the
     <a href="https://github.com/malb/lattice-estimator" target="_blank" rel="noopener">lattice estimator</a>,
     which models sieving/BKZ cost far more carefully.
@@ -278,11 +285,19 @@ app.innerHTML = `
     the next-shortest scales with q/sigma (more headroom between noise and modulus = easier to
     isolate). The block size beta needed to find it grows with the dimension n and shrinks as that
     gap widens - hence beta &asymp; n / (2&middot;log2(q/sigma)). It is a back-of-envelope sizing,
-    deliberately dropping the constants and correction terms a real estimator keeps.
+    deliberately dropping the constants and correction terms a real estimator keeps - and those are
+    exactly the terms that dominate at real parameters, which is why the formula and the
+    "Try Kyber-512 parameters" button in Exhibit 4 give answers two orders of magnitude apart. The
+    button reports a published core-SVP style figure; this formula reports a slope. Trust the button
+    for the number and the formula for the direction.
   </p>
   <canvas id="threshold-chart" width="900" height="260" role="img" aria-label="Security threshold chart: rough teaching model of how required BKZ block size and cost climb with dimension n"></canvas>
   <p>
     ML-KEM (Kyber), FrodoKEM, ML-DSA (Dilithium), and FALCON all rely on LLL/BKZ failing at chosen parameters.
+    Note also what <span class="mono">n</span> means for each: for ML-KEM-512 the LWE dimension is 512
+    (<span class="mono">k=2</span> polynomials of degree 256), and the primal embedding lattice is
+    roughly 1025-dimensional - so the slider's <span class="mono">n</span> is not the same quantity
+    as the 256 that appears in Kyber's name.
   </p>
   <details class="selfcheck">
     <summary>Can you answer this now?</summary>
@@ -1242,17 +1257,28 @@ byId<HTMLButtonElement>('lwe-attack').addEventListener('click', () => {
 });
 
 byId<HTMLButtonElement>('kyber-try').addEventListener('click', () => {
-  const n = 256;
+  // ML-KEM-512 (FIPS 203) is k = 2 polynomials of degree 256 over Z_q, so its LWE
+  // dimension is k*256 = 512 -- not 256. The primal embedding lattice built from a
+  // matching number of samples is therefore roughly 2*512 + 1 = 1025-dimensional,
+  // not 513. An earlier version of this panel printed n=256 and dimension~513,
+  // which conflated the polynomial degree with the LWE dimension.
+  const degree = 256;
+  const k = 2;
+  const lweDim = k * degree; // 512
   const q = 3329;
-  const sigma = 1;
-  const dim = n + 1 + 256;
+  const embedDim = 2 * lweDim + 1; // ~1025
   const reqBeta = 400;
   const costExp = 0.292 * reqBeta;
-  lweOutput.textContent += `\n\nKyber-like test:`;
-  lweOutput.textContent += `\nn=${n}, q=${q}, sigma=${sigma}, embedding dimension~${dim}`;
+  lweOutput.textContent += `\n\nKyber-like test (illustrative figures -- nothing below is computed here):`;
+  lweOutput.textContent += `\nML-KEM-512: k=${k} polynomials of degree ${degree}, so LWE dimension = k*${degree} = ${lweDim}.`;
+  lweOutput.textContent += `\nq=${q}, error = centered binomial (eta1=3, eta2=2), primal embedding dimension ~${embedDim}.`;
   lweOutput.textContent += '\nBKZ-2 (LLL) does not recover target-length vectors in this regime.';
   lweOutput.textContent += `\nRequired block size beta~${reqBeta}, cost~2^${costExp.toFixed(0)} operations.`;
-  lweOutput.textContent += '\nThis demonstrates why real Kyber parameters resist LLL/BKZ at practical resources.';
+  lweOutput.textContent += '\nThat beta/cost pair is a core-SVP style estimate of the kind the CRYSTALS-Kyber';
+  lweOutput.textContent += '\nspecification reports for Kyber-512. It is NOT the output of Exhibit 5\'s teaching';
+  lweOutput.textContent += '\nformula: that formula returns beta~11 at n=256, roughly 37x too small. See the';
+  lweOutput.textContent += '\n"Rough teaching model" note under Exhibit 5 -- the formula gives a shape, this a number.';
+  lweOutput.textContent += '\nThis is why real Kyber parameters resist LLL/BKZ at practical resources.';
   updateLWEMeter(1, 'Kyber-scale regime: norm gap is overwhelmingly large.', 'bad');
 });
 
@@ -1321,13 +1347,27 @@ function renderEx5(): void {
     `Required beta~${(Math.min(n, 16) / (2 * Math.log2(101 / 3))).toFixed(1)}`,
     'Status: BROKEN by LLL/BKZ-2 for tiny dimensions',
   ].join('\n');
+  // The right column is the SAME toy heuristic evaluated at Kyber-like q, not a
+  // security estimate for Kyber. At n=256 it returns beta~11 / cost~2^3, while
+  // published core-SVP estimates for ML-KEM-512 are beta in the low 400s and a
+  // cost near 2^117. Both numbers are shown so the gap is visible rather than
+  // implied.
+  const kyberBeta = 400;
+  const kyberCostExp = 0.292 * kyberBeta;
+  const heuristicAt256 = 256 / (2 * Math.log2(q / sigma));
   exploreRight.textContent = [
-    'SECURE (Kyber-512 style)',
+    'SAME HEURISTIC, at Kyber-like q',
     `n=${n}, q=${q}, sigma=${sigma}`,
     `SVP approx factor: 2^${approxFactorExp.toFixed(1)}`,
-    `Estimated beta~${beta.toFixed(2)}`,
-    `Attack cost~2^${costExp.toFixed(2)}`,
-    insecure ? 'Status: still toy scale' : 'Status: practical attacks out of reach',
+    `Heuristic beta~${beta.toFixed(2)}`,
+    `Heuristic cost~2^${costExp.toFixed(2)}`,
+    '',
+    'For contrast, real ML-KEM-512:',
+    `  LWE dimension 512 (k=2 x degree 256), beta~${kyberBeta}, cost~2^${kyberCostExp.toFixed(0)}`,
+    `  this heuristic at n=256 gives beta~${heuristicAt256.toFixed(1)}`,
+    `  -> off by a factor of ~${(kyberBeta / heuristicAt256).toFixed(0)} on beta. Do not extrapolate it.`,
+    insecure ? 'Status: still toy scale' : 'Status: real parameters are out of reach -- but that',
+    insecure ? '' : '        verdict comes from the published estimate, not the line above.',
   ].join('\n');
   exploreN.style.accentColor = n < 50 ? '#ff3366' : n < 100 ? '#ffaa00' : '#00ff88';
   drawThresholdChart(n);
