@@ -3,6 +3,13 @@ import AxeBuilder from '@axe-core/playwright';
 
 test.beforeEach(async ({ page }) => {
   await page.goto('/');
+  // Settle the `rise` fade-in before anything scans: axe otherwise samples the
+  // exhibits mid-animation at partial opacity and reports phantom
+  // color-contrast failures. (Same killMotion tactic as the e2e a11y gate;
+  // the config-level reducedMotion option is not honored by this runner.)
+  await page.addStyleTag({
+    content: `*,*::before,*::after{animation:none!important;transition:none!important}`,
+  });
   // The app renders into #app via main.ts; wait for the first exhibit.
   await expect(page.getByRole('heading', { name: /What Is a Lattice/i })).toBeVisible();
 });

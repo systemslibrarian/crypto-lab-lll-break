@@ -5,6 +5,9 @@
   --text: #ebf2ff;
   --muted: #a6b8d6;
   --line: #2c3f63;
+  /* text-entry control boundary — WCAG 1.4.11 needs >=3:1; this reaches 3.7:1
+     on the --panel fill and 4.0:1 on the --bg-soft surface behind it. */
+  --line-control: #62779e;
   --red: #ff3366;
   --green: #00ff88;
   --cyan: #00d4ff;
@@ -21,6 +24,9 @@
   --text: #0f1624;
   --muted: #2f405f;
   --line: #b5c3df;
+  /* text-entry control boundary — 3.6:1 on the --panel fill, 4.0:1 on the
+     white --bg-soft (was --line #b5c3df, 1.6:1 / 1.8:1). */
+  --line-control: #6c80a6;
 }
 
 * {
@@ -175,6 +181,15 @@ button {
   border-radius: 8px;
   padding: 10px;
   min-height: 44px;
+}
+
+/* Text-entry controls are found by their boundary, so it must clear WCAG
+   1.4.11's 3:1 — buttons keep the softer --line (their fill + label carry
+   them), form fields get the stronger --line-control. */
+textarea,
+input,
+select {
+  border-color: var(--line-control);
 }
 
 .btn {
