@@ -115,3 +115,38 @@ test('no critical or serious accessibility violations', async ({ page }) => {
     blocking.map((v) => `${v.id}: ${v.help}`).join('\n'),
   ).toEqual([]);
 });
+
+test('SUCCESS is never printed over a vector that is not the secret', async ({ page }) => {
+  // The defect this pins: the verdict was `ok && recoverMethod === 'short-vector'`
+  // and never consulted the byte comparison computed a few lines later. `ok` is a
+  // sigma-scaled residual check, so at higher noise an arbitrary short vector
+  // passes it and the page printed "SUCCESS - secret read off a reduced short
+  // vector" above a recovered vector unrelated to the secret. Challenge 5 walks
+  // learners straight into this regime and promises a FAILED verdict.
+  const out = page.locator('#lwe-output');
+
+  for (const sigma of ['5', '7', '9', '10']) {
+    await page.locator('#lab-seed').fill('1234');
+    await page.getByRole('button', { name: 'Apply seed' }).click();
+    await page.locator('#lwe-sigma').fill(sigma);
+    await page.getByRole('button', { name: 'Generate LWE Instance' }).click();
+    await expect(out).toContainText(/Secret s =/);
+    await page.getByRole('button', { name: 'Run LLL\/BKZ Attack' }).click();
+    await expect(out).toContainText(/Lattice attack result:/);
+
+    const text = (await out.textContent()) ?? '';
+    if (/Lattice attack result: SUCCESS/.test(text)) {
+      // A SUCCESS headline must be backed by the exact-match line.
+      expect(text, `sigma ${sigma}: SUCCESS without EXACT MATCH`).toContain('EXACT MATCH');
+      expect(text, `sigma ${sigma}: SUCCESS alongside a non-secret vector`).not.toContain(
+        'NOT the secret',
+      );
+    }
+    if (/NOT the secret/.test(text)) {
+      // ...and a non-secret vector must never carry a SUCCESS headline.
+      expect(text, `sigma ${sigma}: non-secret vector reported as SUCCESS`).not.toContain(
+        'Lattice attack result: SUCCESS',
+      );
+    }
+  }
+});

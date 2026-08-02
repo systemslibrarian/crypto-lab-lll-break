@@ -1223,8 +1223,23 @@ byId<HTMLButtonElement>('lwe-attack').addEventListener('click', () => {
     }
     // Keep the lattice attack and the teaching baseline strictly separated, so a
     // baseline recovery is never mistaken for a lattice break.
-    const latticeOk = ok && result.recoverMethod === 'short-vector';
+    //
+    // The success verdict must be the byte comparison against the real secret,
+    // not the residual check. `ok` comes from a sigma-scaled residual, so above
+    // roughly sigma = 5 an arbitrary short vector passes it — and the page used
+    // to print SUCCESS over a recovered vector unrelated to the secret while
+    // the line below quietly called it "close". A break the learner cannot
+    // distinguish from a miss is not a break.
+    const exact =
+      !!result.recovered && result.recovered.join(',') === lweInstance.secret.join(',');
+    const latticeOk = ok && result.recoverMethod === 'short-vector' && exact;
     lweOutput.textContent += `\n\nLattice attack result: ${latticeOk ? 'SUCCESS - secret read off a reduced short vector' : 'FAILED - reduction did not expose the (-s, e, +-1) vector'}`;
+    if (ok && result.recoverMethod === 'short-vector' && !exact) {
+      lweOutput.textContent +=
+        '\n  -> the reduction returned a short vector, but it is NOT the (-s, e, +-1) target:' +
+        '\n     the residual check it passed is sigma-scaled, so at this noise level short' +
+        '\n     vectors exist that have nothing to do with the secret.';
+    }
     if (result.recoverMethod === 'bruteforce' && result.recovered) {
       lweOutput.textContent += '\nTeaching baseline: brute force found the secret (exhaustive search over the tiny toy secret space)';
       lweOutput.textContent += '\n  -> do NOT count baseline recovery as a lattice break';
@@ -1236,12 +1251,26 @@ byId<HTMLButtonElement>('lwe-attack').addEventListener('click', () => {
     }
     if (ok) {
       const recovered = result.recovered!;
-      const exact = recovered.join(',') === lweInstance.secret.join(',');
-      lweOutput.textContent += `\nRecovered secret: [${recovered.join(', ')}] ${exact ? 'EXACT MATCH' : 'close'}`;
+      lweOutput.textContent += `\nRecovered secret: [${recovered.join(', ')}] ${exact ? 'EXACT MATCH' : 'NOT the secret'}`;
+      if (!exact) {
+        lweOutput.textContent += `\n  actual secret:   [${lweInstance.secret.join(', ')}]`;
+      }
     }
     lweOutput.textContent += `\n${summarizeBKZImpact(bkz.tours, bkz.improvements, ok, result.recoverMethod)}`;
-    if (ok && result.recoverMethod === 'short-vector') {
-      updateLWEMeter(gapScore, 'short vector is close to target regime.', 'good');
+    // The meter reports the NORM GAP, which is a real measurement — but its
+    // label must not promise a break the byte comparison did not confirm. A
+    // gap at or under 1 scores 100 because the vector is as short as the
+    // target, and that is exactly the regime where a short vector unrelated to
+    // the secret can appear, so "close to target regime" was being shown at
+    // full confidence while recovery had failed.
+    if (latticeOk) {
+      updateLWEMeter(gapScore, 'short vector is the target: secret recovered exactly.', 'good');
+    } else if (ok && result.recoverMethod === 'short-vector') {
+      updateLWEMeter(
+        gapScore,
+        'norm gap is small, but the vector found is not the secret.',
+        'warn',
+      );
     } else if (ok) {
       updateLWEMeter(gapScore, 'basis improved, but recovery leaned on toy fallback.', 'warn');
     } else {
