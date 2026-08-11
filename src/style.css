@@ -5,9 +5,17 @@
   --text: #ebf2ff;
   --muted: #a6b8d6;
   --line: #2c3f63;
-  /* text-entry control boundary — WCAG 1.4.11 needs >=3:1; this reaches 3.7:1
-     on the --panel fill and 4.0:1 on the --bg-soft surface behind it. */
+  /* Control boundaries — WCAG 1.4.11 needs >=3:1 against BOTH the control's own
+     fill and the surface behind it. --line (#2c3f63) is a SURFACE divider and
+     reaches only 1.71:1 there, so it delineates no control; every control that
+     is found by its edge uses one of these three instead.
+     Measured in this theme: --line-control 3.97:1 on the .exhibit gradient,
+     --line-cyan 9.29:1, --line-amber 8.62:1. */
   --line-control: #62779e;
+  --line-cyan: #00d4ff;
+  --line-amber: #ffaa00;
+  --line-green: #00ff88;
+  --line-gold: #ffd700;
   --red: #ff3366;
   --green: #00ff88;
   --cyan: #00d4ff;
@@ -24,9 +32,17 @@
   --text: #0f1624;
   --muted: #2f405f;
   --line: #b5c3df;
-  /* text-entry control boundary — 3.6:1 on the --panel fill, 4.0:1 on the
-     white --bg-soft (was --line #b5c3df, 1.6:1 / 1.8:1). */
+  /* The light theme never got its own accent inks, so --cyan and --amber were
+     being used as control boundaries on a near-white surface and measured
+     1.77:1 and 1.90:1 — both under the 3:1 SC 1.4.11 floor, in the theme where
+     a saturated mid-tone has the least room. These are their light-theme
+     counterparts. Measured here: --line-control 4.01:1 on white,
+     --line-cyan 7.17:1, --line-amber 5.97:1. */
   --line-control: #6c80a6;
+  --line-cyan: #00697f;
+  --line-amber: #8a5a00;
+  --line-green: #00733d;
+  --line-gold: #7a5c00;
 }
 
 * {
@@ -138,8 +154,14 @@ h2 {
   gap: 14px;
 }
 
+/* minmax(0, 1fr), not 1fr. A grid item's automatic minimum size is its
+   min-content, and `overflow-x: auto` only zeroes that floor when the SCROLLER
+   IS THE GRID ITEM — here the scrollers (`pre#lll-metrics`, `#lll-log`) are
+   children of a bare <div> that is the item, so their 608px min-content became
+   the column's floor and pushed the whole document to 629px at a 380px
+   viewport. Measured: document scrollWidth 629px -> 380px. */
 .two {
-  grid-template-columns: 1fr;
+  grid-template-columns: minmax(0, 1fr);
 }
 
 label {
@@ -147,12 +169,23 @@ label {
   margin-bottom: 8px;
 }
 
+/* `[tabindex]` is in this list because the seven scrolling output regions
+   (#gso-text, #lll-log, #lll-metrics, #lwe-output, #explore-left,
+   #explore-right, .embed-grid-wrap) carry `tabindex="0"` so they can be
+   scrolled from a keyboard (WCAG 2.1.1) — and a tab stop with no visible
+   indicator is a 2.4.7 failure. A <pre> and a <div> match none of the five
+   element selectors beside it, so all seven were silently unindicated. */
 a:focus-visible,
 button:focus-visible,
 input:focus-visible,
 select:focus-visible,
-textarea:focus-visible {
-  outline: 3px solid var(--gold);
+textarea:focus-visible,
+[tabindex]:focus-visible {
+  /* --line-gold, not --gold. #ffd700 measures 1.40:1 against this theme's
+     near-white surfaces from a real screenshot pixel, which is a focus ring
+     nobody can find; the light-theme variant measures 5.78:1. Dark is
+     unchanged (#ffd700, 12.9:1 on --panel). */
+  outline: 3px solid var(--line-gold);
   outline-offset: 2px;
 }
 
@@ -183,12 +216,15 @@ button {
   min-height: 44px;
 }
 
-/* Text-entry controls are found by their boundary, so it must clear WCAG
-   1.4.11's 3:1 — buttons keep the softer --line (their fill + label carry
-   them), form fields get the stronger --line-control. */
+/* A control is found by its boundary, so the boundary must clear WCAG 1.4.11's
+   3:1. This rule used to exclude `button` on the reasoning that "their fill +
+   label carry them" — measured, the fill does not: `.btn` is --panel on the
+   --bg-soft .exhibit gradient, which is 1.09:1, and its --line border was
+   1.71:1 (dark) / 1.75:1 (light). Neither is a boundary. Buttons are in. */
 textarea,
 input,
-select {
+select,
+button {
   border-color: var(--line-control);
 }
 
@@ -201,11 +237,11 @@ select {
 
 .btn:hover {
   transform: translateY(-1px);
-  border-color: var(--cyan);
+  border-color: var(--line-cyan);
 }
 
 .btn.warn {
-  border-color: var(--amber);
+  border-color: var(--line-amber);
 }
 
 .theme-toggle {
@@ -224,7 +260,7 @@ select {
 
 .theme-toggle:hover {
   background: var(--bg-soft);
-  border-color: var(--cyan);
+  border-color: var(--line-cyan);
 }
 
 .controls-row {
@@ -291,7 +327,7 @@ details.selfcheck > summary {
 }
 
 details.selfcheck > summary:focus-visible {
-  outline: 3px solid var(--gold);
+  outline: 3px solid var(--line-gold);
   outline-offset: 2px;
 }
 
@@ -462,7 +498,7 @@ progress {
   flex: 0 0 auto;
   padding: 0;
   border-radius: 50%;
-  border: 1px solid var(--cyan);
+  border: 1px solid var(--line-cyan);
   background: color-mix(in srgb, var(--cyan) 18%, var(--panel));
   color: var(--text);
   font-weight: 700;
@@ -601,23 +637,35 @@ progress {
   border-top: 2px solid var(--red);
 }
 
+/* Every stroke below is a MEANINGFUL GRAPHIC under SC 1.4.11: each is the sole
+   non-textual cue for one step of the cancellation this exhibit exists to show,
+   so each has to reach 3:1 against what it marks. Measured from real screenshot
+   pixels, the dark-theme accents did that; used unchanged in the light theme
+   they did not — the green `.emerge-hot` outline that says "the secret block
+   emerged" was 1.12:1 against the cell it outlines, and the cyan result-row
+   rule was 1.62:1 against the row above it. The --line-* variants are the
+   light-theme counterparts; in the dark theme they are the same colours. */
 .embed-grid tr.embed-subtracting td {
-  outline: 2px solid var(--gold);
+  outline: 2px solid var(--line-gold);
   outline-offset: -2px;
 }
 
 .embed-grid tr.embed-resultrow th,
 .embed-grid tr.embed-resultrow td {
-  border-top: 2px dashed var(--cyan);
+  border-top: 2px dashed var(--line-cyan);
   font-weight: 700;
 }
 
+/* `th` as well as `td`: the "done" rule used to name only `td`, so the result
+   row's own label cell kept the in-progress dashed cyan rule while the rest of
+   the row switched to solid green — one row drawn in two states at once. */
+.embed-grid tr.embed-resultrow-done th,
 .embed-grid tr.embed-resultrow-done td {
-  border-top: 2px solid var(--green);
+  border-top: 2px solid var(--line-green);
 }
 
 .embed-grid td.emerge-hot {
-  outline: 2px solid var(--green);
+  outline: 2px solid var(--line-green);
   outline-offset: -2px;
 }
 
@@ -714,6 +762,15 @@ footer {
   margin-top: 2rem;
 }
 
+/* The four related-demo links had no colour rule at all, so they fell through
+   to the UA default #0000EE — 2.10:1 on the dark theme's #0a0a14 canvas. Same
+   treatment as `.heuristic-note a`: page ink, bold, and the UA underline kept
+   so the link is not identified by colour alone. */
+.scripture-footer a {
+  color: var(--text);
+  font-weight: 700;
+}
+
 @media (prefers-reduced-motion: reduce) {
   * {
     animation: none !important;
@@ -738,7 +795,7 @@ footer {
 
 @media (min-width: 768px) {
   .two {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   }
 
   .controls-row {

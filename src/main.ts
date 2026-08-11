@@ -59,7 +59,7 @@ app.innerHTML = `
   <div class="grid two">
     <div>
       <canvas id="lattice-canvas" width="500" height="400" role="img" aria-label="2D lattice canvas"></canvas>
-      <p class="canvas-legend" aria-hidden="true">
+      <p class="canvas-legend">
         <span class="lg lg-red">red</span> your input basis ·
         <span class="lg lg-green">green</span> current basis ·
         <span class="lg lg-dot">dots</span> lattice points
@@ -112,7 +112,7 @@ app.innerHTML = `
     </div>
     <div>
       <canvas id="gso-canvas" width="500" height="360" role="img" aria-label="Gram-Schmidt visualization"></canvas>
-      <p class="canvas-legend" aria-hidden="true">
+      <p class="canvas-legend">
         <span class="lg lg-red">red</span> input basis b1, b2 ·
         <span class="lg lg-green">green</span> current basis ·
         <span class="lg lg-cyan">dashed cyan</span> Gram-Schmidt directions b1*, b2* ·
@@ -154,7 +154,7 @@ app.innerHTML = `
   <div class="grid two">
     <div>
       <canvas id="lll-canvas" width="420" height="420" role="img" aria-label="LLL basis evolution canvas"></canvas>
-      <p class="canvas-legend" aria-hidden="true">
+      <p class="canvas-legend">
         <span class="lg lg-red">red</span> input basis (fixed) ·
         <span class="lg lg-green">green</span> current reduced basis ·
         <span class="lg lg-cyan">dashed cyan</span> Gram-Schmidt directions ·

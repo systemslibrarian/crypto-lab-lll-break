@@ -1,138 +1,56 @@
-import AxeBuilder from '@axe-core/playwright';
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test } from '@playwright/test';
+import { boot, driveAllStates, NARROW, reportCollected, watchPageErrors } from './gate';
 
 /**
- * WCAG regression gate. Deploys are already gated on the algorithm + guardrail
- * verifiers; this gates them on accessibility the same way. Scans the full page
- * with every collapsible expanded and the interactive demos driven so their
- * generated output is in the DOM, in both themes. Zero tolerance: any WCAG
- * A/AA violation fails the build.
+ * WCAG A/AA regression gate.
+ *
+ * The lab is driven along everything it teaches, and every state is scanned:
+ * the arrival state, where Exhibit 4 is entirely empty and its collapse control
+ * ships `disabled`; both skip links focused through real Tab presses; the two
+ * info tooltips opened by their buttons; Exhibit 1's four sliders taken to the
+ * extreme that collapses the determinant to zero, then the unimodular re-basis;
+ * the Gram-Schmidt step-through cycled all the way round and then re-run on an
+ * already-orthogonal basis; all five LLL presets, both dimensions, delta at
+ * 0.999 auto-run to convergence on a Fibonacci basis (which is the only thing
+ * that makes the step log overflow at all) and at 0.5, plus the input-error
+ * state a non-square matrix produces; Exhibit 4's prerequisite message, then a
+ * seeded instance, the embedding-collapse replay run to its end state, a
+ * successful attack, a FAILED attack at n=10/sigma=10, and the Kyber-512
+ * figures; Exhibit 5 at n=256 and at its minimum; all five canonical labs; a
+ * challenge set-up button; and the finished page with all twelve disclosures
+ * open. Each of those is scanned in {dark, light} × {1280px, 380px}.
+ *
+ * Clipboard permission is granted because "Copy lab link" calls
+ * `navigator.clipboard.writeText` inside a try/catch that falls back to a
+ * DIFFERENT status message on rejection: without the grant the drive would be
+ * asserting against the failure branch while claiming to scan the success one.
+ *
+ * See `gate.ts` for why nothing is injected into the page (this lab reads
+ * `prefers-reduced-motion` in its TypeScript as well as its CSS, and a style tag
+ * reaches neither), why no disclosure is force-opened, why the lab's defaults
+ * are asserted rather than assumed, and why `violations` is not the whole
+ * oracle on a page where every section is a gradient.
  */
 
-const TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'];
+for (const theme of ['dark', 'light'] as const) {
+  test(`no WCAG A/AA violations in ${theme} theme`, async ({ page, context }) => {
+    test.setTimeout(1_500_000);
+    await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+    const errors = watchPageErrors(page);
+    await boot(page, theme);
+    await driveAllStates(page, theme);
+    expect(errors, errors.join('\n')).toEqual([]);
+    reportCollected();
+  });
 
-/** Neutralise CSS transitions/animations so scans see settled, stable state. */
-async function killMotion(page: Page): Promise<void> {
-  await page.addStyleTag({
-    content: `*,*::before,*::after{
-      transition:none!important;
-      animation:none!important;
-      scroll-behavior:auto!important;
-    }`,
+  test(`no WCAG A/AA violations in ${theme} theme at 380px`, async ({ page, context }) => {
+    test.setTimeout(1_500_000);
+    await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+    const errors = watchPageErrors(page);
+    await page.setViewportSize(NARROW);
+    await boot(page, theme);
+    await driveAllStates(page, `${theme} @380px`);
+    expect(errors, errors.join('\n')).toEqual([]);
+    reportCollected();
   });
 }
-
-/** Expand every <details> so collapsed content is scanned too. */
-async function openAllDetails(page: Page): Promise<void> {
-  await page.evaluate(() => {
-    for (const details of document.querySelectorAll('details')) {
-      details.open = true;
-    }
-  });
-}
-
-/**
- * Drive the interactive demos so axe scans their generated output, not just the
- * static shell. Each step is best-effort (guarded) so a UI tweak can't turn the
- * gate red for the wrong reason.
- */
-async function driveDemos(page: Page): Promise<void> {
-  const click = async (name: RegExp | string) => {
-    const btn = page.getByRole('button', { name });
-    if (await btn.count()) await btn.first().click();
-  };
-
-  // Exhibit 2/3: Gram-Schmidt + LLL step-through.
-  await click(/^Step$/);
-  await click(/^Step$/);
-
-  // Exhibit 4: seed, generate a toy LWE instance, run the reduction attack.
-  const seed = page.locator('#lab-seed');
-  if (await seed.count()) {
-    await seed.fill('1234');
-    await click(/Apply seed/i);
-  }
-  await click(/Generate LWE Instance/i);
-  await expect(page.locator('#lwe-output')).toContainText(/Secret s =/i);
-  await click(/Run LLL\/BKZ Attack/i);
-  await expect(page.locator('#lwe-output')).toContainText(/Lattice attack result:/i);
-}
-
-/**
- * WCAG 1.4.11 (non-text contrast) regression for text-entry control boundaries.
- * Axe does not flag low-contrast control borders, so we measure them directly:
- * every visible input/select/textarea's rendered border color must reach 3:1
- * against both the control's own fill and the first opaque ancestor surface
- * behind it. Translucent colors are composited against those surfaces first.
- */
-async function minimumControlBoundaryRatio(page: Page): Promise<number> {
-  return page.locator('input:visible, select:visible, textarea:visible').evaluateAll((elements) => {
-    const parse = (value: string): { c: number[]; a: number } => {
-      const n = (value.match(/[\d.]+/g) ?? ['0', '0', '0']).map(Number);
-      return { c: n.slice(0, 3), a: n[3] ?? 1 };
-    };
-    const luminance = (parts: number[]): number => {
-      const c = parts.map((part) => {
-        const v = part / 255;
-        return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
-      });
-      return 0.2126 * (c[0] ?? 0) + 0.7152 * (c[1] ?? 0) + 0.0722 * (c[2] ?? 0);
-    };
-    const ratio = (a: number[], b: number[]): number => {
-      const [la, lb] = [luminance(a), luminance(b)];
-      return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
-    };
-    const composite = (fg: number[], alpha: number, bg: number[]): number[] =>
-      fg.map((v, i) => v * alpha + (bg[i] ?? 0) * (1 - alpha));
-    const surfaceBehind = (el: Element): number[] => {
-      for (let node = el.parentElement; node; node = node.parentElement) {
-        const bg = parse(getComputedStyle(node).backgroundColor);
-        if (bg.a >= 1) return bg.c;
-      }
-      return [255, 255, 255];
-    };
-    return Math.min(
-      ...elements.map((el) => {
-        const style = getComputedStyle(el);
-        const exterior = surfaceBehind(el);
-        const bg = parse(style.backgroundColor);
-        const fill = bg.a >= 1 ? bg.c : composite(bg.c, bg.a, exterior);
-        const b = parse(style.borderTopColor);
-        const border = b.a >= 1 ? b.c : composite(b.c, b.a, fill);
-        return Math.min(ratio(border, fill), ratio(border, exterior));
-      }),
-    );
-  });
-}
-
-async function scan(page: Page): Promise<void> {
-  const results = await new AxeBuilder({ page }).withTags(TAGS).analyze();
-  const summary = results.violations.map((v) => ({
-    id: v.id,
-    impact: v.impact,
-    help: v.help,
-    nodes: v.nodes.map((n) => n.target.join(' ')).slice(0, 5),
-  }));
-  expect(summary).toEqual([]);
-}
-
-test('no WCAG A/AA violations in dark theme', async ({ page }) => {
-  await page.goto('.');
-  await killMotion(page);
-  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
-  await driveDemos(page);
-  await openAllDetails(page);
-  expect(await minimumControlBoundaryRatio(page)).toBeGreaterThanOrEqual(3);
-  await scan(page);
-});
-
-test('no WCAG A/AA violations in light theme', async ({ page }) => {
-  await page.goto('.');
-  await killMotion(page);
-  await page.locator('#cl-theme-toggle').click();
-  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
-  await driveDemos(page);
-  await openAllDetails(page);
-  expect(await minimumControlBoundaryRatio(page)).toBeGreaterThanOrEqual(3);
-  await scan(page);
-});
