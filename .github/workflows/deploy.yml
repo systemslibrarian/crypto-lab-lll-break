@@ -45,7 +45,7 @@ jobs:
       - name: Install Playwright browser
         run: npx playwright install --with-deps chromium
 
-      - name: UI smoke tests (Playwright, dev server)
+      - name: UI smoke tests (Playwright, built app)
         run: npm run test:ui
 
       - name: Accessibility gate (axe-core, WCAG A/AA, built app)
