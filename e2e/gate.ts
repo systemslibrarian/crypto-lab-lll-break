@@ -201,13 +201,12 @@ export async function assertSingleBanner(page: Page): Promise<void> {
  * would change the CSS and not the TypeScript, leaving the basis tween and the
  * 520ms collapse waits live in a page whose stylesheet says motion is off.
  *
- * The theme is seeded through `localStorage` rather than by clicking the
- * toggle, which also pins down a real failure mode: `index.html`'s anti-flash
- * script reads `localStorage.getItem('theme')` and both toggles — the shared
- * bar's `#cl-theme-toggle` and the lab's own `#theme-toggle` — write
- * `localStorage.setItem('theme', …)`. If those keys ever drift apart the theme
- * silently stops persisting, and this boot fails on `data-theme` rather than
- * quietly scanning dark twice.
+ * The theme is seeded through `localStorage` rather than by clicking anything,
+ * because there is nothing to click: dark is the only theme, `index.html` pins
+ * it before first paint with a literal that overwrites whatever was stored, and
+ * the page ships no control that can change it. The seed plus the `data-theme`
+ * assertion below is what catches a boot script that goes back to READING a
+ * stored preference — pass `'light'` and the assertion fails, as it should.
  *
  * The defaults are asserted at length because two of this lab's five exhibits
  * ship EMPTY (the LWE transcript and the embedding grid have no content until
@@ -725,9 +724,9 @@ export async function driveAllStates(page: Page, theme: string): Promise<void> {
   await expect(page.locator('a.cl-skip-link')).toBeFocused();
   await scanAt('shared-header skip link focused');
 
-  // The lab's own skip link is the sixth tab stop: after the shared bar's skip
-  // link, brand, Menu, GitHub and theme toggle. Tabbing to it rather than
-  // calling focus() is what proves it is reachable at all.
+  // The lab's own skip link is the fourth tab stop: after the shared bar's skip
+  // link, brand, Menu and GitHub. Tabbing to it rather than calling focus() is
+  // what proves it is reachable at all.
   for (let i = 0; i < 8; i += 1) {
     if (await page.locator('#app a.skip-link').evaluate((el) => el === document.activeElement)) break;
     await page.keyboard.press('Tab');

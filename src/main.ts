@@ -9,11 +9,8 @@ if (!app) {
   throw new Error('Missing app root');
 }
 
-const theme = document.documentElement.getAttribute('data-theme') ?? 'dark';
-
 app.innerHTML = `
 <a class="skip-link" href="#main-content">Skip to main content</a>
-<button id="theme-toggle" type="button" class="theme-toggle" aria-label="${theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}">${theme === 'dark' ? '🌙' : '☀️'}</button>
 
 <main id="main-content">
 <header class="cl-hero">
@@ -476,29 +473,6 @@ function drawBasisScene(
     ctx.fillText(label, 10, 20);
   }
 }
-
-const themeToggle = byId<HTMLButtonElement>('theme-toggle');
-
-function setupThemeToggle(button: HTMLButtonElement): void {
-  const sync = () => {
-    const mode = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
-    button.textContent = mode === 'dark' ? '🌙' : '☀️';
-    button.setAttribute('aria-label', mode === 'dark' ? 'Switch to light mode' : 'Switch to dark mode');
-    button.setAttribute('aria-pressed', mode === 'light' ? 'true' : 'false');
-    button.title = mode === 'dark' ? 'Switch to light mode' : 'Switch to dark mode';
-  };
-
-  button.addEventListener('click', () => {
-    const next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
-    document.documentElement.setAttribute('data-theme', next);
-    localStorage.setItem('theme', next);
-    sync();
-  });
-
-  sync();
-}
-
-setupThemeToggle(themeToggle);
 
 const b1Angle = byId<HTMLInputElement>('b1-angle');
 const b1Len = byId<HTMLInputElement>('b1-len');
