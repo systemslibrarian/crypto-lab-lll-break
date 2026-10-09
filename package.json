@@ -5,19 +5,19 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "npm run test:publish-request && tsc && vite build",
     "preview": "vite preview",
-    "deploy": "npm run build && gh-pages -d dist",
+    "deploy": "gh workflow run deploy.yml --repo systemslibrarian/crypto-lab-lll-break --ref main",
     "verify:algo": "tsx scripts/verify.ts",
     "verify:guardrails": "node scripts/guardrails.mjs",
     "verify": "npm run verify:algo && npm run verify:guardrails",
     "test:ui": "playwright test --config playwright.config.ts",
-    "test:a11y": "playwright test --config playwright.a11y.config.ts"
+    "test:a11y": "playwright test --config playwright.a11y.config.ts",
+    "test:publish-request": "node --test tests/publish-request.node.mjs"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.13.0",
     "@playwright/test": "^1.63.0",
-    "gh-pages": "^6.3.0",
     "tsx": "^4.23.15",
     "typescript": "~7.0.2",
     "vite": "^8.3.2"
