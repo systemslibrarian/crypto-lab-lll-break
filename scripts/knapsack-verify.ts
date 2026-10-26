@@ -704,6 +704,27 @@ check('a bounded higher-density sweep shows honest failures and claims no thresh
   }
 });
 
+check('an in-budget n=8 failure prevents dimension or density generalisations', () => {
+  const bits = toBits('00001100');
+  const pair = seededKey(8, 1, 10);
+  const target = encryptBits(pair.publicWeights, bits);
+  assert.equal(
+    arithmeticBudget(pair.publicWeights, target).withinBudget,
+    true,
+    'the failure must not be an arithmetic-screen refusal',
+  );
+  assert.deepEqual(
+    decryptWithTrapdoor(pair.privateKey, target).bits,
+    bits,
+    'the trapdoor must still decrypt the instance exactly',
+  );
+  const result = attackPublicOnly({ publicWeights: pair.publicWeights, target, delta: DELTA });
+  assert.equal(result.outcome, 'no-candidate');
+  assert.equal(result.bits, null);
+  assert.equal(result.exactLatticeTransformVerified, true);
+  assert.equal(result.rowsInspected, 2 * 9, 'both nine-row passes must be exhausted');
+});
+
 check('the deterministic failure fixture fails cleanly and claims nothing', () => {
   const bits = toBits('0110100101100101');
   const pair = seededKey(16, 1, 30);

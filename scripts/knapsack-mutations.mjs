@@ -1,7 +1,7 @@
 /**
  * E-K-09 mutation gate for the Merkle-Hellman / Lagarias-Odlyzko exhibit.
  *
- * Fifteen load-bearing edits to `src/knapsack.ts` and one to `src/main.ts`. For
+ * Fifteen load-bearing edits to `src/knapsack.ts` and four to `src/main.ts`. For
  * every one the run proves six things, and restores the source in a
  * `finally`-style path whether or not the mutation was caught:
  *
@@ -17,9 +17,9 @@
  * A mutation that cannot be applied, or that is killed by something other than
  * its own named assertion, is a failure of this harness rather than evidence.
  *
- * The one mutation against `src/main.ts` is the stale-result retirement, which
- * is DOM wiring and has no pure check to own it. It is owned by a Playwright
- * test instead, and because a browser test runs against the BUILT bundle this
+ * The mutations against `src/main.ts` cover DOM wiring and have no pure check
+ * to own them. They are owned by Playwright tests instead, and because a
+ * browser test runs against the BUILT bundle this
  * harness rebuilds and asserts the bundle hash actually moved before believing
  * the run -- a mutation applied to a file the build did not pick up is
  * indistinguishable from a mutation nothing caught.
@@ -135,10 +135,10 @@ const mutations = [
     kind: 'pure',
   },
   {
-    name: 'the exact unimodular-transform postcheck always passes',
+    name: 'the exact postcheck accepts a non-unimodular transform',
     file: KNAPSACK,
-    anchor: '  return exactLatticeTransformError(inputBasis, reducedBasis, transform) === null;',
-    replacement: '  return true;',
+    anchor: '  if (det !== 1n && det !== -1n) {',
+    replacement: '  if (false && det !== 1n && det !== -1n) {',
     check: 'the reduced basis is postchecked as an exact unimodular transform',
     kind: 'pure',
   },
@@ -166,6 +166,30 @@ const mutations = [
       "mhBits.addEventListener('input', () => {\n  mhRetire('Message changed. Previous key, ciphertext and verdict retired. Press Generate.');\n});",
     replacement: "mhBits.addEventListener('input', () => {\n  mhStatus.textContent = 'Message changed.';\n});",
     check: 'changing the message retires the key, the lattice and the verdict',
+    kind: 'ui',
+  },
+  {
+    name: 'seeded knapsack generation no longer rewinds its random stream',
+    file: MAIN,
+    anchor: '  if (activeSeed !== null) setSeed(activeSeed);',
+    replacement: '  if (false && activeSeed !== null) setSeed(activeSeed);',
+    check: 'seeded knapsack generation rewinds to the same instance',
+    kind: 'ui',
+  },
+  {
+    name: 'shared lab links omit the knapsack dimension',
+    file: MAIN,
+    anchor: "  p.set('mhn', mhN.value);",
+    replacement: "  // p.set('mhn', mhN.value);",
+    check: 'a copied lab link preserves every knapsack control',
+    kind: 'ui',
+  },
+  {
+    name: 'an Algorithm SV endpoint is labelled eligible for LLL',
+    file: MAIN,
+    anchor: '  if (budget.withinBudget && inAlgorithmSvDomain) {',
+    replacement: '  if (budget.withinBudget) {',
+    check: 'the all-one endpoint decrypts but is refused as outside Algorithm SV',
     kind: 'ui',
   },
 ];

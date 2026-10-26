@@ -326,7 +326,9 @@ app.innerHTML = `
     <strong>Historical and broken. Do not use this for anything.</strong>
     Merkle-Hellman (1978) was an early public-key encryption proposal, and it did not survive the 1980s.
     What runs below recovers <strong>message bits</strong> from one ciphertext in selected toy low-density instances.
-    It does <strong>not</strong> reconstruct the private trapdoor, and it is <strong>not</strong> Shamir's attack, which does.
+    It learns no original or equivalent decryption pair, and it is <strong>not</strong>
+    <a href="https://dept.math.lsa.umich.edu/~lagarias/doc/1218attack.pdf" target="_blank" rel="noopener noreferrer">Shamir's attack</a>,
+    which seeks a usable pair that need not equal the encrypter's original trapdoor.
     Failure to recover here is <strong>not</strong> a security result, and nothing in this exhibit bears on ML-KEM/Kyber,
     on any production parameter set, or on worst-case lattice hardness.
   </p>
@@ -1563,10 +1565,17 @@ mhGenerate.addEventListener('click', () => {
     return;
   }
 
+  // A seed names an instance, not merely the beginning of one long mutable
+  // stream. Rewind before every generation so the advertised invariant really
+  // is "same seed + same parameters = same key and ciphertext."
+  const activeSeed = getSeed();
+  if (activeSeed !== null) setSeed(activeSeed);
   const keyPair = generateKeyPair(n, scaleBits);
   const target = encryptBits(keyPair.publicWeights, bits);
   const d = density(keyPair.publicWeights);
   const budget = arithmeticBudget(keyPair.publicWeights, target);
+  const publicWeightSum = sumOf(keyPair.publicWeights as bigint[]);
+  const inAlgorithmSvDomain = target >= 1n && target < publicWeightSum;
   mhInstance = { keyPair, bits, target, density: d, budget, n, scaleBits };
 
   const priv = keyPair.privateKey;
@@ -1589,7 +1598,7 @@ mhGenerate.addEventListener('click', () => {
     `  within budget: ${budget.withinBudget} (headroom x${budget.headroom.toFixed(1)})`,
   ].join('\n');
 
-  if (budget.withinBudget) {
+  if (budget.withinBudget && inAlgorithmSvDomain) {
     const basis = lagariasOdlyzkoBasis(keyPair.publicWeights, target);
     const embedded = plaintextVectorInLattice(keyPair.publicWeights, target, bits);
     mhBasis.textContent = [
@@ -1604,6 +1613,12 @@ mhGenerate.addEventListener('click', () => {
       'Lagarias-Odlyzko (3.4): the plaintext vector is in this lattice.',
       `  sum(e_i * b_i) + b_{n+1} = [${embedded.join(', ')}]`,
       `  last coordinate = M - sum(e_i a_i) = ${embedded[n]}  (must be 0)`,
+    ].join('\n');
+  } else if (!inAlgorithmSvDomain) {
+    mhBasis.textContent = [
+      'Algorithm SV basis not handed to LLL.',
+      `The published target domain is 1 <= M < sum(a_i); here M = ${target} and sum(a_i) = ${publicWeightSum}.`,
+      'The trapdoor route remains exact BigInt arithmetic; press Run LLL Attack to see the named refusal.',
     ].join('\n');
   } else {
     mhBasis.textContent = [
@@ -1624,8 +1639,12 @@ mhGenerate.addEventListener('click', () => {
   mhAttack.disabled = false;
   mhStatus.textContent =
     `Key generated: n=${n}, k=${scaleBits} bits, density ${d.toFixed(4)}` +
-    (getSeed() === null ? ' (crypto-random).' : ` (seeded ${getSeed()}).`) +
-    (budget.withinBudget ? '' : ' The LLL route is outside its input-basis arithmetic screen.');
+    (activeSeed === null ? ' (crypto-random).' : ` (seeded ${activeSeed}).`) +
+    (!inAlgorithmSvDomain
+      ? " The LLL route is outside Algorithm SV's published target domain."
+      : budget.withinBudget
+        ? ''
+        : ' The LLL route is outside its input-basis arithmetic screen.');
 });
 
 mhDecrypt.addEventListener('click', () => {
@@ -1750,8 +1769,8 @@ mhAttack.addEventListener('click', () => {
     '  That enumeration is ground truth, not an attack. Counting it as a break would be the',
     '  brute-force-disguised-as-an-attack mistake Exhibit 4 already guards against.',
     '',
-    'What was NOT recovered: w, m and the superincreasing a\'. The trapdoor is untouched.',
-    "That is Shamir's attack, which is a different attack, and is not implemented here.",
+    "What was NOT recovered: the original w, m and superincreasing a', or any equivalent decryption pair.",
+    "Shamir's different attack seeks usable decryption information; it is not implemented here.",
   );
 
   mhOutput.textContent = lines.join('\n');
@@ -1810,6 +1829,9 @@ function buildLabQuery(): string {
   p.set('delta', lllDelta.value);
   p.set('matrix', lllMatrix.value);
   p.set('en', exploreN.value);
+  p.set('mhn', mhN.value);
+  p.set('mhk', mhScale.value);
+  p.set('mhbits', mhBits.value);
   return p.toString();
 }
 
@@ -1834,8 +1856,12 @@ function applyLabQuery(query: string): void {
   setIf('delta', lllDelta);
   setIf('matrix', lllMatrix);
   setIf('en', exploreN);
+  setIf('mhn', mhN);
+  setIf('mhk', mhScale);
+  setIf('mhbits', mhBits);
   refreshLWEAria();
   updateSliderAria(lllDelta, 'delta');
+  updateSliderAria(mhScale, 'private weight scale k in bits');
   resetLLL();
   renderEx5();
   updateLabStatus();
