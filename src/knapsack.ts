@@ -90,10 +90,17 @@ export interface KnapsackAttackResult {
   /** Total reduced-basis rows examined across both passes. Bounded by 2(n+1). */
   readonly rowsInspected: number;
   readonly rejections: readonly CandidateRejection[];
-  /** The exact basis handed to LLL on pass 1. */
+  /**
+   * The exact basis handed to LLL on PASS 1 only. Pass 2 (Algorithm SV step
+   * (4)) builds a second, different basis on sum(a_i) - M; it is deliberately
+   * not carried here, so `winningRow` may come from a basis this field does not
+   * describe. `pass` says which, and the UI says so too rather than letting a
+   * reader assume the row is a row of the basis on screen.
+   */
   readonly basis: readonly (readonly number[])[];
-  /** What LLL returned on pass 1. */
+  /** What LLL returned on pass 1, with the same caveat as `basis`. */
   readonly reducedBasis: readonly (readonly number[])[];
+  /** Pass 1's swap count. */
   readonly swapCount: number;
   /** Set only when outcome === 'refused'. */
   readonly refusal: string | null;

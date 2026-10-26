@@ -1673,8 +1673,10 @@ mhAttack.addEventListener('click', () => {
   }
 
   lines.push(
-    `  LLL returned a reduced basis after ${result.swapCount} swaps. First reduced row:`,
-    `     [${(result.reducedBasis[0] ?? []).join(', ')}]`,
+    `  Pass 1 (target as given): LLL returned a reduced basis after ${result.swapCount} swaps.`,
+    `     its first reduced row: [${(result.reducedBasis[0] ?? []).join(', ')}]`,
+    '     (the basis panel above and this row are pass 1; pass 2 reduces a second,',
+    '      different basis built on sum(a_i) - M, which is not displayed)',
     '',
     `  Bounded candidate search, fully disclosed: ${result.rowsInspected} reduced rows inspected`,
     `  (at most 2*(n+1) = ${2 * (n + 1)}; Algorithm SV runs two passes, the second on sum(a_i) - M).`,
