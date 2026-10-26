@@ -22,6 +22,7 @@ test('renders all exhibits and the labs/challenges sections', async ({ page }) =
     /LLL Step-by-Step/i,
     /Break a Toy LWE Instance/i,
     /Parameter Explorer/i,
+    /Knapsack Trapdoors/i,
     /Challenges/i,
   ]) {
     await expect(page.getByRole('heading', { name })).toBeVisible();
@@ -149,4 +150,199 @@ test('SUCCESS is never printed over a vector that is not the secret', async ({ p
       );
     }
   }
+});
+
+
+/* ---------------------------------------------------------------------- */
+/* Exhibit 6 - Merkle-Hellman trapdoor knapsacks (E-K-09)                   */
+/* ---------------------------------------------------------------------- */
+
+/** Seed, then generate the pinned n=8 / k=14 instance the assertions below use. */
+async function knapsackSetup(page: import('@playwright/test').Page): Promise<void> {
+  await page.locator('#lab-seed').fill('1234');
+  await page.getByRole('button', { name: 'Apply seed' }).click();
+  await page.locator('#mh-n').selectOption('8');
+  await page.locator('#mh-scale').fill('14');
+  await page.locator('#mh-bits').fill('01101001');
+  await page.getByRole('button', { name: 'Generate Knapsack Key' }).click();
+  await expect(page.locator('#mh-keys')).toContainText('PUBLIC (everything an attacker is given)');
+}
+
+/** Pull the public weights and ciphertext straight out of what the page rendered. */
+function readPublicInstance(text: string): { weights: bigint[]; target: bigint } {
+  const weights = (
+    text.match(/a_i = w \* a'_i mod m, Merkle-Hellman \(3\)\n\s*\[([^\]]*)\]/) ?? []
+  )[1];
+  const target = (text.match(/ciphertext S = sum\(x_i \* a_i\) = (\d+)/) ?? [])[1];
+  return {
+    weights: (weights ?? '').split(',').map((w) => BigInt(w.trim())),
+    target: BigInt(target ?? '0'),
+  };
+}
+
+test('the knapsack exhibit ships empty, with both downstream controls locked', async ({ page }) => {
+  await expect(page.locator('#mh-keys')).toBeEmpty();
+  await expect(page.locator('#mh-basis')).toBeEmpty();
+  await expect(page.locator('#mh-output')).toBeEmpty();
+  await expect(page.locator('#mh-decrypt')).toBeDisabled();
+  await expect(page.locator('#mh-attack')).toBeDisabled();
+});
+
+test('the generated key satisfies the two Merkle-Hellman conditions on screen', async ({ page }) => {
+  await knapsackSetup(page);
+  const text = (await page.locator('#mh-keys').textContent()) ?? '';
+
+  // (8) is displayed as a computed boolean, not asserted in prose.
+  expect(text).toContain("(m > sum(a'): true, Merkle-Hellman (8))");
+
+  // Recompute the density from the weights the page itself printed, rather
+  // than trusting the number beside them.
+  const { weights, target } = readPublicInstance(text);
+  expect(weights).toHaveLength(8);
+  const max = weights.reduce((a, b) => (a > b ? a : b));
+  const recomputed = 8 / Math.log2(Number(max));
+  const shown = Number((text.match(/= (\d\.\d{4})\n/) ?? [])[1] ?? NaN);
+  expect(Math.abs(recomputed - shown)).toBeLessThan(5e-5);
+
+  // The ciphertext must be the subset sum of the bits that were encrypted.
+  const bits = '01101001'.split('').map(Number);
+  let sum = 0n;
+  for (let i = 0; i < 8; i += 1) if (bits[i] === 1) sum += weights[i];
+  expect(sum).toBe(target);
+
+  // And the embedding really contains the plaintext vector.
+  await expect(page.locator('#mh-basis')).toContainText(
+    'last coordinate = M - sum(e_i a_i) = 0  (must be 0)',
+  );
+});
+
+test('trapdoor decryption reproduces the message that was encrypted', async ({ page }) => {
+  await knapsackSetup(page);
+  await page.getByRole('button', { name: 'Decrypt with Trapdoor' }).click();
+  const out = page.locator('#mh-output');
+  await expect(out).toContainText('TRAPDOOR ROUTE');
+  await expect(out).toContainText('recovered bits = 01101001');
+  await expect(out).toContainText('remainder after the pass = 0 (must be 0: true)');
+  await expect(out).toContainText('EXACT MATCH with the message that was sent');
+});
+
+test('the knapsack lattice attack recovers message bits from public data alone', async ({ page }) => {
+  await knapsackSetup(page);
+  const keys = (await page.locator('#mh-keys').textContent()) ?? '';
+  const { weights, target } = readPublicInstance(keys);
+
+  await page.getByRole('button', { name: 'Run LLL Attack (public data only)' }).click();
+  const out = page.locator('#mh-output');
+  await expect(out).toContainText('Lattice attack result: SUCCESS');
+
+  const text = (await out.textContent()) ?? '';
+  // What the attacker was withheld is stated, and the claim is checked here by
+  // recomputing the subset sum of the bits the page says it recovered.
+  expect(text).toContain('withheld: the private sequence, the modulus, the multiplier');
+  const recovered = (text.match(/bits = ([01]+)/) ?? [])[1] ?? '';
+  expect(recovered).toHaveLength(8);
+  let sum = 0n;
+  for (let i = 0; i < 8; i += 1) if (recovered[i] === '1') sum += weights[i];
+  expect(sum, 'the recovered bits must reproduce the ciphertext exactly').toBe(target);
+  expect(text).toContain('EXACT MATCH with the sent message');
+
+  // The two things this exhibit must never be read as claiming.
+  expect(text).toContain('The trapdoor is untouched.');
+  expect(text).toContain("That is Shamir's attack, which is a different attack");
+});
+
+test('a SUCCESS headline is never printed without the exact-sum verification', async ({ page }) => {
+  await knapsackSetup(page);
+  await page.getByRole('button', { name: 'Run LLL Attack (public data only)' }).click();
+  const text = (await page.locator('#mh-output').textContent()) ?? '';
+  if (/Lattice attack result: SUCCESS/.test(text)) {
+    expect(text).toContain('Verified in exact integer arithmetic: sum(bits_i * a_i) == S  ->  true');
+  }
+  if (/Lattice attack result: FAILED/.test(text)) {
+    expect(text).toContain('This is NOT a security result');
+    expect(text).not.toContain('Lattice attack result: SUCCESS');
+  }
+});
+
+test('changing the message retires the key, the lattice and the verdict', async ({ page }) => {
+  await knapsackSetup(page);
+  await page.getByRole('button', { name: 'Run LLL Attack (public data only)' }).click();
+  await expect(page.locator('#mh-output')).toContainText('Lattice attack result:');
+
+  // One keystroke in the message box invalidates the key, the ciphertext, the
+  // lattice and the verdict together. A stale verdict beside changed inputs is
+  // a number computed from something the reader is no longer looking at.
+  await page.locator('#mh-bits').fill('11101001');
+
+  await expect(page.locator('#mh-output')).toBeEmpty();
+  await expect(page.locator('#mh-keys')).toBeEmpty();
+  await expect(page.locator('#mh-basis')).toBeEmpty();
+  await expect(page.locator('#mh-decrypt')).toBeDisabled();
+  await expect(page.locator('#mh-attack')).toBeDisabled();
+  await expect(page.locator('#mh-status')).toContainText('retired');
+});
+
+test('changing n or the scale also retires the displayed result', async ({ page }) => {
+  for (const change of [
+    async () => page.locator('#mh-n').selectOption('10'),
+    async () => page.locator('#mh-scale').fill('9'),
+  ]) {
+    await knapsackSetup(page);
+    await page.getByRole('button', { name: 'Decrypt with Trapdoor' }).click();
+    await expect(page.locator('#mh-output')).toContainText('TRAPDOOR ROUTE');
+    await change();
+    await expect(page.locator('#mh-output')).toBeEmpty();
+    await expect(page.locator('#mh-attack')).toBeDisabled();
+  }
+});
+
+test('a malformed message is refused by name and generates nothing', async ({ page }) => {
+  await page.locator('#mh-bits').fill('0110100');
+  await page.getByRole('button', { name: 'Generate Knapsack Key' }).click();
+  await expect(page.locator('#mh-status')).toContainText('Input error');
+  await expect(page.locator('#mh-keys')).toBeEmpty();
+  await expect(page.locator('#mh-attack')).toBeDisabled();
+
+  await page.locator('#mh-bits').fill('0110100x');
+  await page.getByRole('button', { name: 'Generate Knapsack Key' }).click();
+  await expect(page.locator('#mh-status')).toContainText('Input error');
+  await expect(page.locator('#mh-keys')).toBeEmpty();
+});
+
+test('the knapsack exhibit is operable from the keyboard alone', async ({ page }) => {
+  await page.locator('#lab-seed').fill('1234');
+  await page.getByRole('button', { name: 'Apply seed' }).click();
+  const generate = page.locator('#mh-generate');
+  await generate.focus();
+  await expect(generate).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#mh-keys')).toContainText('PUBLIC');
+  const attack = page.locator('#mh-attack');
+  await attack.focus();
+  await expect(attack).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#mh-output')).toContainText('PUBLIC LATTICE ROUTE');
+});
+
+test('the knapsack exhibit states its limits without being opened', async ({ page }) => {
+  // These are the claims a reader must not have to go looking for, so they are
+  // in always-visible prose rather than behind a disclosure.
+  const notes = page.locator('#exhibit-6 .heuristic-note');
+  await expect(notes.first()).toContainText('Historical and broken');
+  await expect(notes.first()).toContainText('not Shamir');
+  await expect(notes.first()).toContainText('not a security result');
+  await expect(notes.first()).toContainText('ML-KEM/Kyber');
+  await expect(page.locator('#mh-limits')).toContainText('conditional on a shortest-vector oracle');
+  await expect(page.locator('#mh-limits')).toContainText('does not display a density threshold');
+});
+
+test('the knapsack panel reflows at 380px without horizontal overflow', async ({ page }) => {
+  await page.setViewportSize({ width: 380, height: 900 });
+  await knapsackSetup(page);
+  await page.getByRole('button', { name: 'Run LLL Attack (public data only)' }).click();
+  await expect(page.locator('#mh-output')).toContainText('PUBLIC LATTICE ROUTE');
+  const overflow = await page.evaluate(
+    () => document.documentElement.scrollWidth - window.innerWidth,
+  );
+  expect(overflow, 'the page must not scroll sideways at 380px').toBeLessThanOrEqual(1);
 });

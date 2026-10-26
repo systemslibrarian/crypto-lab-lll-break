@@ -17,8 +17,10 @@ import { boot, driveAllStates, NARROW, reportCollected, watchPageErrors } from '
  * seeded instance, the embedding-collapse replay run to its end state, a
  * successful attack, a FAILED attack at n=10/sigma=10, and the Kyber-512
  * figures; Exhibit 5 at n=256 and at its minimum; all five canonical labs; a
- * challenge set-up button; and the finished page with all twelve disclosures
- * open. Each of those is scanned in {dark, light} × {1280px, 380px}.
+ * challenge set-up button; Exhibit 6's input error, its seeded key with the
+ * Lagarias-Odlyzko basis rendered, its trapdoor transcript, its public lattice
+ * verdict, its retired state and its widest n=12 basis; and the finished page
+ * with all thirteen disclosures open. Each of those is scanned in {dark, light} × {1280px, 380px}.
  *
  * Clipboard permission is granted because "Copy lab link" calls
  * `navigator.clipboard.writeText` inside a try/catch that falls back to a

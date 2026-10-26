@@ -38,7 +38,7 @@ export const NARROW = { width: 380, height: 800 };
  *     state the drive actually needs to scan.
  *
  *  2. IT FORCE-REVEALED EVERY DISCLOSURE. `openAllDetails()` set `details.open
- *     = true` from script on all twelve — the five "Can you answer this now?"
+ *     = true` from script on all thirteen — the six "Can you answer this now?"
  *     panels, the six challenge answers and the `.model-note`. This gate never
  *     touches `.open`; every disclosure is opened by clicking its own
  *     `<summary>`, which is the route a reader has, and the SHUT state is
@@ -234,7 +234,7 @@ export async function boot(page: Page, theme: 'dark' | 'light'): Promise<void> {
   // The whole page is one `innerHTML` assignment followed by ~40 `byId()`
   // lookups that throw on a miss, so a navigation that resolves proves nothing.
   await expect(page.locator('main#main-content')).toBeVisible();
-  await expect(page.locator('section.exhibit')).toHaveCount(7);
+  await expect(page.locator('section.exhibit')).toHaveCount(8);
 
   // The reduced-motion block's one job here, asserted rather than assumed: the
   // six `.exhibit` sections must not be stranded at `rise`'s `opacity: 0`.
@@ -299,8 +299,19 @@ export async function boot(page: Page, theme: 'dark' | 'light'): Promise<void> {
     'Mode: crypto-random (not reproducible). Enter a seed for repeatable runs.'
   );
 
-  // Twelve disclosures, all shut.
-  await expect(page.locator('details')).toHaveCount(12);
+  // ── Exhibit 6: ships entirely empty, and BOTH downstream controls are ──
+  // DISABLED. Nothing about a knapsack exists until Generate is pressed.
+  await expect(page.locator('#mh-n')).toHaveValue('8');
+  await expect(page.locator('#mh-scale')).toHaveValue('14');
+  await expect(page.locator('#mh-bits')).toHaveValue('01101001');
+  await expect(page.locator('#mh-keys')).toBeEmpty();
+  await expect(page.locator('#mh-basis')).toBeEmpty();
+  await expect(page.locator('#mh-output')).toBeEmpty();
+  await expect(page.locator('#mh-decrypt')).toBeDisabled();
+  await expect(page.locator('#mh-attack')).toBeDisabled();
+
+  // Thirteen disclosures, all shut.
+  await expect(page.locator('details')).toHaveCount(13);
   await expect(page.locator('details[open]')).toHaveCount(0);
 
   await settle(page);
@@ -652,10 +663,10 @@ export async function scan(page: Page, label: string): Promise<void> {
 /**
  * Open every VISIBLE shut disclosure by clicking its summary.
  *
- * `:visible` is defensive rather than load-bearing — all twelve `<details>` on
+ * `:visible` is defensive rather than load-bearing — all thirteen `<details>` on
  * this page are in the static template and none of them is behind a hidden
  * panel — but forcing `.open` from script is exactly what the gate this
- * replaces did to all twelve, and the point of clicking is that the summary is
+ * replaces did to all thirteen, and the point of clicking is that the summary is
  * the control a reader operates.
  */
 async function openAllDisclosures(page: Page, expectSome = true): Promise<void> {
@@ -926,6 +937,53 @@ export async function driveAllStates(page: Page, theme: string): Promise<void> {
   await expect(page.locator('#explore-right')).toContainText('Status: still toy scale');
   await scanAt('parameter explorer at its minimum n');
 
+  // ── Exhibit 6: Merkle-Hellman knapsack ──────────────────────────────────
+  // Four states nothing else on the page renders: a named input error, a
+  // populated three-panel instance, the trapdoor transcript, and the public
+  // lattice verdict. The attack transcript is the longest `<pre>` in the lab,
+  // so 380px reflow and keyboard reachability of its scroll region only exist
+  // in a state a drive has to go and build.
+  await page.locator('#mh-bits').fill('0110100');
+  await page.click('#mh-generate');
+  await expect(page.locator('#mh-status')).toContainText('Input error');
+  await expect(page.locator('#mh-keys')).toBeEmpty();
+  await scanAt('Exhibit 6 input error: a message whose length does not match n');
+
+  await page.locator('#lab-seed').fill('1234');
+  await page.click('#lab-apply-seed');
+  await page.locator('#mh-bits').fill('01101001');
+  await page.click('#mh-generate');
+  await expect(page.locator('#mh-keys')).toContainText('PUBLIC (everything an attacker is given)');
+  await expect(page.locator('#mh-basis')).toContainText('Algorithm SV basis (2.4)');
+  await expect(page.locator('#mh-decrypt')).toBeEnabled();
+  await scanAt('Exhibit 6 seeded key, ciphertext and the Lagarias-Odlyzko basis rendered');
+
+  await page.click('#mh-decrypt');
+  await expect(page.locator('#mh-output')).toContainText('TRAPDOOR ROUTE');
+  await scanAt('Exhibit 6 trapdoor decryption transcript');
+
+  await page.click('#mh-attack');
+  await expect(page.locator('#mh-output')).toContainText('Lattice attack result:');
+  await scanAt('Exhibit 6 public lattice attack verdict');
+
+  // The retirement state: every panel empty again, both controls re-locked.
+  // It is a different rendering from first paint, because the status line now
+  // carries prose where it began with the no-key message.
+  await page.locator('#mh-scale').fill('9');
+  await expect(page.locator('#mh-output')).toBeEmpty();
+  await expect(page.locator('#mh-attack')).toBeDisabled();
+  await scanAt('Exhibit 6 results retired after an input changed');
+
+  // The highest-density setting the selector offers, which is also the longest
+  // transcript: n=12 prints a 13x13 basis.
+  await page.locator('#mh-n').selectOption('12');
+  await page.locator('#mh-scale').fill('6');
+  await page.click('#mh-generate');
+  await expect(page.locator('#mh-keys')).toContainText('PUBLIC');
+  await page.click('#mh-attack');
+  await expect(page.locator('#mh-output')).toContainText('Lattice attack result:');
+  await scanAt('Exhibit 6 at n=12, the widest basis and longest transcript');
+
   // ── The canonical labs, which re-drive several exhibits at once ──────────
   for (const lab of [
     'swap-cascade',
@@ -953,8 +1011,8 @@ export async function driveAllStates(page: Page, theme: string): Promise<void> {
 
   // ── Everything open ──────────────────────────────────────────────────────
   await openAllDisclosures(page);
-  await expect(page.locator('details[open]')).toHaveCount(12);
-  await scanAt('the finished page with all twelve disclosures open');
+  await expect(page.locator('details[open]')).toHaveCount(13);
+  await scanAt('the finished page with all thirteen disclosures open');
   // The tab order is at its longest here — every disclosure open, every output
   // region populated — so this is the state where a missing focus indicator on
   // a scroll region is reachable.

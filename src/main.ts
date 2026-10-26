@@ -2,6 +2,22 @@ import './style.css';
 import { bkzReduce, buildLWELattice, generateLWE, recoverFromReducedBasis } from './bkz';
 import { determinant, lllReduce, orthogonalityDefect, shortestVectorInBasis } from './lll';
 import { dot, gramSchmidt, norm, type Basis, type Vec } from './lattice';
+import {
+  arithmeticBudget,
+  attackPublicOnly,
+  decryptWithTrapdoor,
+  density,
+  encryptBits,
+  enumerateSolutions,
+  generateKeyPair,
+  lagariasOdlyzkoBasis,
+  plaintextVectorInLattice,
+  sumOf,
+  verifyCandidate,
+  type ArithmeticBudget,
+  type MerkleHellmanKeyPair,
+  type PublicKnapsackInstance,
+} from './knapsack';
 import { getSeed, randomIntInclusive, setSeed } from './rng';
 
 const app = document.querySelector<HTMLDivElement>('#app');
@@ -299,6 +315,64 @@ app.innerHTML = `
   <details class="selfcheck">
     <summary>Can you answer this now?</summary>
     <p>Q: Moving n upward, the required block size beta and the cost exponent climb steeply. Which single fact makes real lattice schemes secure? A: BKZ cost grows roughly as 2^(0.292*beta), and the beta needed to find the short vector grows with the dimension. At Kyber-like parameters the required beta puts the cost far beyond practical resources - the attack shape still exists, it is just computationally out of reach. (This is intuition, not a certified security estimate.)</p>
+  </details>
+</section>
+
+<section class="exhibit" id="exhibit-6" aria-labelledby="exhibit-6-title">
+  <h2 id="exhibit-6-title">Exhibit 6 - Knapsack Trapdoors and the Limits of Worst-Case Hardness</h2>
+  <p class="objective"><strong>Goal:</strong> build a real (toy) Merkle-Hellman trapdoor knapsack, encrypt with it, decrypt with the trapdoor, and then read the message bits back out of <em>public data alone</em> by handing a Lagarias-Odlyzko lattice to the same LLL engine Exhibits 3 and 4 drive. Then say exactly why "subset sum is NP-complete" never protected it.</p>
+
+  <p class="heuristic-note">
+    <strong>Historical and broken. Do not use this for anything.</strong>
+    Merkle-Hellman (1978) was the first public-key cryptosystem that was not RSA, and it did not survive the 1980s.
+    What runs below recovers <strong>message bits</strong> from one ciphertext in selected toy low-density instances.
+    It does <strong>not</strong> reconstruct the private trapdoor, and it is <strong>not</strong> Shamir's attack, which does.
+    Failure to recover here is <strong>not</strong> a security result, and nothing in this exhibit bears on ML-KEM/Kyber,
+    on any production parameter set, or on worst-case lattice hardness.
+  </p>
+
+  <div class="controls-row">
+    <label>Weights n
+      <select id="mh-n">
+        <option value="8" selected>8</option>
+        <option value="10">10</option>
+        <option value="12">12</option>
+      </select>
+    </label>
+    <label>Private weight scale k (bits) <input id="mh-scale" type="range" min="1" max="20" value="14" /></label>
+    <label>Message bits b1..bn
+      <input id="mh-bits" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" value="01101001" />
+    </label>
+  </div>
+  <div class="controls-row">
+    <button id="mh-generate" type="button" class="btn">Generate Knapsack Key</button>
+    <button id="mh-decrypt" type="button" class="btn" disabled>Decrypt with Trapdoor</button>
+    <button id="mh-attack" type="button" class="btn" disabled>Run LLL Attack (public data only)</button>
+  </div>
+  <p class="mono" id="mh-status" role="status" aria-live="polite">No key yet. Press Generate. Apply a seed in Reproducible Labs first if you want the same key every time.</p>
+
+  <div class="grid two">
+    <pre id="mh-keys" class="panel mono" tabindex="0" role="region" aria-label="Merkle-Hellman key material"></pre>
+    <pre id="mh-basis" class="panel mono" tabindex="0" role="region" aria-label="Lagarias-Odlyzko lattice basis"></pre>
+  </div>
+  <pre id="mh-output" class="panel mono" aria-live="polite" tabindex="0" role="region" aria-label="Knapsack trapdoor and attack transcript"></pre>
+
+  <p class="heuristic-note" id="mh-limits">
+    <strong>What the density number is, and what it is not.</strong>
+    Density is <span class="mono">d = n / log2(max a_i)</span> over the <em>public</em> weights - the convention of
+    Lagarias-Odlyzko (1985, Section 1) and, identically, Coster et al. (1992, equation 1.2). The published bounds
+    <span class="mono">0.6463...</span> (Lagarias-Odlyzko) and <span class="mono">0.9408...</span> (Coster et al.)
+    are <strong>conditional on a shortest-vector oracle</strong>, which LLL is not; with real LLL the rigorous
+    statement is only <span class="mono">d &lt; c/n</span>. Those theorems also describe a sample space of
+    <em>uniformly random</em> weights, and Merkle-Hellman weights are not uniform - they are
+    <span class="mono">w&middot;a' mod m</span> for a superincreasing <span class="mono">a'</span>. So the bounds are
+    quoted here as history, not borrowed as authority. <strong>This exhibit does not display a density threshold</strong>,
+    because a handful of toy instances cannot locate one.
+  </p>
+
+  <details class="selfcheck">
+    <summary>Can you answer this now?</summary>
+    <p>Q: Subset sum is NP-complete. Why did that never make Merkle-Hellman secure? A: NP-completeness is a statement about the <em>hardest</em> instances of a problem, and a cryptosystem is a <em>distribution</em> of instances. Merkle-Hellman does not sample hard knapsacks - it samples <span class="mono">a_i = w&middot;a'_i mod m</span> for a superincreasing <span class="mono">a'</span>, which is a vanishingly small, highly structured subclass. Merkle and Hellman wrote this themselves on page 525: the knapsack problem "is only difficult from a worst case point of view", and their trapdoor knapsacks "form a proper subset of all possible knapsacks, and their solutions are therefore not necessarily as difficult as for the hardest knapsacks. It is the hardest knapsacks with which NP theory is concerned." The lattice attack never touches the worst case; it exploits the structure the trapdoor had to leave behind.</p>
   </details>
 </section>
 
@@ -1383,6 +1457,276 @@ bindRangeAria(lweQ, 'q');
 bindRangeAria(lweSigma, 'sigma');
 bindRangeAria(lweBeta, 'beta');
 bindRangeAria(exploreN, 'parameter n');
+
+// ---- Exhibit 6: Merkle-Hellman trapdoor knapsack, and the LLL attack on it ----
+//
+// The trapdoor route and the attack route share NOTHING but the public weights
+// and the ciphertext. `attackPublicOnly` is given a frozen object holding
+// exactly { publicWeights, target, delta } and cannot reach the modulus, the
+// multiplier, the private sequence or the plaintext. The "did it actually get
+// the message?" comparison happens HERE, in the controller, after the attack
+// has returned -- never inside it.
+const mhN = byId<HTMLSelectElement>('mh-n');
+const mhScale = byId<HTMLInputElement>('mh-scale');
+const mhBits = byId<HTMLInputElement>('mh-bits');
+const mhGenerate = byId<HTMLButtonElement>('mh-generate');
+const mhDecrypt = byId<HTMLButtonElement>('mh-decrypt');
+const mhAttack = byId<HTMLButtonElement>('mh-attack');
+const mhStatus = byId<HTMLParagraphElement>('mh-status');
+const mhKeys = byId<HTMLPreElement>('mh-keys');
+const mhBasis = byId<HTMLPreElement>('mh-basis');
+const mhOutput = byId<HTMLPreElement>('mh-output');
+
+// Declared once and printed, rather than read off another exhibit's slider:
+// Lenstra-Lenstra-Lovasz (1.5) permits any fixed 1/4 < delta < 1.
+const MH_DELTA = 0.99;
+
+const MH_DEFAULT_BITS: Record<string, string> = {
+  '8': '01101001',
+  '10': '0110100101',
+  '12': '011010010110',
+};
+
+interface MHInstance {
+  keyPair: MerkleHellmanKeyPair;
+  bits: number[];
+  target: bigint;
+  density: number;
+  budget: ArithmeticBudget;
+  n: number;
+  scaleBits: number;
+}
+
+let mhInstance: MHInstance | null = null;
+
+/**
+ * Retire every displayed result.
+ *
+ * Any change to n, the scale, or the message bits invalidates the key, the
+ * ciphertext, the lattice and the verdict all at once. Leaving a stale verdict
+ * on screen beside changed inputs is how a reader ends up believing a number
+ * that was computed from something else.
+ */
+function mhRetire(reason: string): void {
+  mhInstance = null;
+  mhKeys.textContent = '';
+  mhBasis.textContent = '';
+  mhOutput.textContent = '';
+  mhDecrypt.disabled = true;
+  mhAttack.disabled = true;
+  mhStatus.textContent = reason;
+}
+
+function mhReadBits(n: number): number[] | null {
+  const raw = mhBits.value.trim();
+  if (!/^[01]+$/.test(raw)) return null;
+  if (raw.length !== n) return null;
+  const bits = raw.split('').map((c) => (c === '1' ? 1 : 0));
+  return bits.some((b) => b === 1) ? bits : null;
+}
+
+function mhFormatWeights(label: string, weights: readonly bigint[]): string {
+  return `${label}\n  [${weights.map((w) => w.toString()).join(', ')}]`;
+}
+
+mhN.addEventListener('change', () => {
+  const next = MH_DEFAULT_BITS[mhN.value];
+  if (next) mhBits.value = next;
+  mhRetire(`n changed to ${mhN.value}. Previous key, ciphertext and verdict retired. Press Generate.`);
+});
+mhScale.addEventListener('input', () => {
+  updateSliderAria(mhScale, 'private weight scale k in bits');
+  mhRetire(`Scale changed to k=${mhScale.value} bits. Previous key, ciphertext and verdict retired. Press Generate.`);
+});
+mhBits.addEventListener('input', () => {
+  mhRetire('Message changed. Previous key, ciphertext and verdict retired. Press Generate.');
+});
+
+mhGenerate.addEventListener('click', () => {
+  const n = Number(mhN.value);
+  const scaleBits = Number(mhScale.value);
+  const bits = mhReadBits(n);
+  if (!bits) {
+    mhRetire(
+      `Input error: the message must be exactly ${n} characters of 0 and 1, and not all zero. ` +
+        `Got "${mhBits.value}".`,
+    );
+    return;
+  }
+
+  const keyPair = generateKeyPair(n, scaleBits);
+  const target = encryptBits(keyPair.publicWeights, bits);
+  const d = density(keyPair.publicWeights);
+  const budget = arithmeticBudget(keyPair.publicWeights, target);
+  mhInstance = { keyPair, bits, target, density: d, budget, n, scaleBits };
+
+  const priv = keyPair.privateKey;
+  const privSum = sumOf(priv.privateWeights as bigint[]);
+  mhKeys.textContent = [
+    'PRIVATE (the trapdoor -- visible only because this is a lesson)',
+    mhFormatWeights("  a' superincreasing, Merkle-Hellman (1)", priv.privateWeights),
+    `  sum(a') = ${privSum}`,
+    `  m  = ${priv.modulus}   (m > sum(a'): ${priv.modulus > privSum}, Merkle-Hellman (8))`,
+    `  w  = ${priv.multiplier}   w^-1 mod m = ${priv.multiplierInverse}`,
+    '',
+    'PUBLIC (everything an attacker is given)',
+    mhFormatWeights('  a_i = w * a\'_i mod m, Merkle-Hellman (3)', keyPair.publicWeights),
+    `  ciphertext S = sum(x_i * a_i) = ${target}`,
+    '',
+    `Density d = n / log2(max a_i) = ${n} / log2(${keyPair.publicWeights.reduce((a, b) => (a > b ? a : b)).toString()}) = ${d.toFixed(4)}`,
+    `Exact-arithmetic budget: (n+1)*E^2 = ${budget.required.toExponential(3)} vs MAX_SAFE_INTEGER ${budget.limit}`,
+    `  within budget: ${budget.withinBudget} (headroom x${budget.headroom.toFixed(1)})`,
+  ].join('\n');
+
+  const basis = lagariasOdlyzkoBasis(keyPair.publicWeights, target);
+  const embedded = plaintextVectorInLattice(keyPair.publicWeights, target, bits);
+  mhBasis.textContent = [
+    'Lagarias-Odlyzko Algorithm SV basis (2.4), as printed:',
+    '  b_i     = (0,..,1,..,0, -a_i)',
+    '  b_{n+1} = (0,..,0,      M)',
+    'No scaling constant N, no centring at 1/2 -- this is NOT the Coster et al. embedding.',
+    '',
+    `The ${n + 1} x ${n + 1} basis handed to LLL (delta = ${MH_DELTA}):`,
+    fmtMatrix(basis, n + 1),
+    '',
+    'Lagarias-Odlyzko (3.4): the plaintext vector is in this lattice.',
+    `  sum(e_i * b_i) + b_{n+1} = [${embedded.join(', ')}]`,
+    `  last coordinate = M - sum(e_i a_i) = ${embedded[n]}  (must be 0)`,
+  ].join('\n');
+
+  mhOutput.textContent = [
+    `Encrypted ${n} message bits b1..bn = ${bits.join('')} (b_i multiplies a_i; ascending weight index).`,
+    `Ciphertext S = ${target}`,
+    '',
+    'Now: decrypt it with the trapdoor, then attack it without one.',
+  ].join('\n');
+
+  mhDecrypt.disabled = false;
+  mhAttack.disabled = false;
+  mhStatus.textContent =
+    `Key generated: n=${n}, k=${scaleBits} bits, density ${d.toFixed(4)}` +
+    (getSeed() === null ? ' (crypto-random).' : ` (seeded ${getSeed()}).`);
+});
+
+mhDecrypt.addEventListener('click', () => {
+  if (!mhInstance) return;
+  const { keyPair, target, bits } = mhInstance;
+  const result = decryptWithTrapdoor(keyPair.privateKey, target);
+  const exact = result.bits.join('') === bits.join('');
+  mhOutput.textContent = [
+    'TRAPDOOR ROUTE -- the legitimate receiver, holding w, m and a\'.',
+    `  S  = ${target}`,
+    `  S' = w^-1 * S mod m = ${result.transformedSum}        Merkle-Hellman (4)`,
+    "  greedy pass over the superincreasing a', largest first, Merkle-Hellman (2):",
+    `     recovered bits = ${result.bits.join('')}`,
+    `     remainder after the pass = ${result.remainder} (must be 0: ${result.consistent})`,
+    '',
+    exact
+      ? '  Trapdoor decryption: EXACT MATCH with the message that was sent.'
+      : '  Trapdoor decryption: DOES NOT match the message that was sent.',
+    '',
+    'That route used the private key. The next one does not.',
+  ].join('\n');
+  mhStatus.textContent = exact
+    ? 'Trapdoor decryption reproduced the message exactly.'
+    : 'Trapdoor decryption did not reproduce the message.';
+});
+
+mhAttack.addEventListener('click', () => {
+  if (!mhInstance) return;
+  const { keyPair, target, bits, density: d, budget, n } = mhInstance;
+
+  // Everything the attacker gets. Nothing private is in this object, and the
+  // freeze is what makes that readable at the call site rather than a promise.
+  const publicInstance: PublicKnapsackInstance = Object.freeze({
+    publicWeights: keyPair.publicWeights,
+    target,
+    delta: MH_DELTA,
+  });
+  const result = attackPublicOnly(publicInstance);
+
+  // Ground truth, computed HERE and only here, after the attack returned.
+  const truth = enumerateSolutions(keyPair.publicWeights, target);
+  const ambiguous = truth.count > 1;
+
+  const lines: string[] = [
+    'PUBLIC LATTICE ROUTE -- the attacker, holding only the public weights and S.',
+    `  given: ${n} public weights, S = ${target}, delta = ${MH_DELTA}`,
+    '  withheld: the private sequence, the modulus, the multiplier, its inverse, the plaintext',
+    `  density d = ${d.toFixed(4)}, exact-arithmetic budget headroom x${budget.headroom.toFixed(1)}`,
+    '',
+  ];
+
+  if (result.outcome === 'refused') {
+    lines.push(`  REFUSED: ${result.refusal}`);
+    mhOutput.textContent = lines.join('\n');
+    mhStatus.textContent = 'Attack refused: the instance is outside the exact-arithmetic budget.';
+    return;
+  }
+
+  lines.push(
+    `  LLL returned a reduced basis after ${result.swapCount} swaps. First reduced row:`,
+    `     [${(result.reducedBasis[0] ?? []).join(', ')}]`,
+    '',
+    `  Bounded candidate search, fully disclosed: ${result.rowsInspected} reduced rows inspected`,
+    `  (at most 2*(n+1) = ${2 * (n + 1)}; Algorithm SV runs two passes, the second on sum(a_i) - M).`,
+    `  Rows rejected: ${result.rejections.length}. There is no brute-force fallback.`,
+  );
+  for (const r of result.rejections.slice(0, 4)) {
+    lines.push(`     pass ${r.pass} row ${r.row + 1}: rejected -- ${r.detail}`);
+  }
+  lines.push('');
+
+  if (result.outcome === 'recovered' && result.bits) {
+    const exact = result.bits.join('') === bits.join('');
+    lines.push(
+      `  Candidate read off pass ${result.pass}, reduced row ${(result.row ?? 0) + 1}, with lambda = ${result.lambda}:`,
+      `     row  = [${(result.winningRow ?? []).join(', ')}]`,
+      `     bits = ${result.bits.join('')}`,
+      `  Verified in exact integer arithmetic: sum(bits_i * a_i) == S  ->  ${verifyCandidate(
+        keyPair.publicWeights,
+        target,
+        result.bits,
+      )}`,
+      '',
+      'Lattice attack result: SUCCESS -- message bits recovered from public data alone.',
+      exact
+        ? '  Ground truth (checked after the attack returned): EXACT MATCH with the sent message.'
+        : '  Ground truth (checked after the attack returned): verifies, but is NOT the sent message.',
+    );
+  } else {
+    lines.push(
+      'Lattice attack result: FAILED -- no inspected row produced a verified candidate.',
+      '  This is NOT a security result. It is one browser-scale LLL run on one toy instance.',
+      '  A stronger reduction, a better embedding, or simply a different instance may succeed.',
+    );
+  }
+
+  lines.push(
+    '',
+    `  Exhaustive ground truth (verifier side only, affordable because n = ${n} is toy):`,
+    `     bit vectors whose public sum equals S: ${truth.count}`,
+    ambiguous
+      ? '     The instance is AMBIGUOUS: more than one message produces this ciphertext,'
+      : '     The instance is unambiguous: exactly one message produces this ciphertext.',
+    ambiguous
+      ? '     so "recovering the message" is not well defined for it.'
+      : '',
+    '  That enumeration is ground truth, not an attack. Counting it as a break would be the',
+    '  brute-force-disguised-as-an-attack mistake Exhibit 4 already guards against.',
+    '',
+    'What was NOT recovered: w, m and the superincreasing a\'. The trapdoor is untouched.',
+    "That is Shamir's attack, which is a different attack, and is not implemented here.",
+  );
+
+  mhOutput.textContent = lines.filter((l) => l !== '').join('\n');
+  mhStatus.textContent =
+    result.outcome === 'recovered'
+      ? 'Lattice attack recovered message bits from public data alone.'
+      : 'Lattice attack found no verified candidate. That is not evidence of security.';
+});
+
+updateSliderAria(mhScale, 'private weight scale k in bits');
 
 // ---- Reproducible labs: seeding, shareable links, canonical labs ----
 const labSeed = byId<HTMLInputElement>('lab-seed');
