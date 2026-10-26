@@ -9,8 +9,10 @@
     "preview": "vite preview",
     "deploy": "gh workflow run deploy.yml --repo systemslibrarian/crypto-lab-lll-break --ref main",
     "verify:algo": "tsx scripts/verify.ts",
+    "verify:knapsack": "tsx scripts/knapsack-verify.ts",
     "verify:guardrails": "node scripts/guardrails.mjs",
-    "verify": "npm run verify:algo && npm run verify:guardrails",
+    "verify": "npm run verify:algo && npm run verify:knapsack && npm run verify:guardrails",
+    "test:mutations": "node scripts/knapsack-mutations.mjs",
     "test:ui": "playwright test --config playwright.config.ts",
     "test:a11y": "playwright test --config playwright.a11y.config.ts",
     "test:publish-request": "node --test tests/publish-request.node.mjs"
