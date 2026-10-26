@@ -29,6 +29,7 @@ import {
   lagariasOdlyzkoBasis,
   modInverse,
   plaintextVectorInLattice,
+  readCandidateBits,
   sumOf,
   verifyCandidate,
   type MerkleHellmanPrivateKey,
@@ -495,6 +496,46 @@ check('candidate coordinates outside the permitted bit set are rejected', () => 
   // Values other than 0 and 1 are not bits, whatever a lattice row holds.
   assert.equal(verifyCandidate(f.publicWeights, f.target, [0, 1, 1, 2, 1, 0, 0, 1]), false);
   assert.equal(verifyCandidate(f.publicWeights, f.target, [0, 1, 1, -1, 1, 0, 0, 1]), false);
+
+  // Algorithm SV step (3) at the level the paper states it. A row is a
+  // candidate only when its leading coordinates are all 0 or all ONE fixed
+  // non-zero lambda. These four cases are what that sentence means.
+  const one = readCandidateBits([1, 0, 1, 0, -5], 4);
+  assert.deepEqual(one.bits, [1, 0, 1, 0], 'lambda = 1 is the ordinary case');
+  assert.equal((one as { lambda: number }).lambda, 1);
+
+  const scaled = readCandidateBits([2, 0, 2, 0, -5], 4);
+  assert.deepEqual(scaled.bits, [1, 0, 1, 0], 'a fixed lambda = 2 is still legal');
+  assert.equal((scaled as { lambda: number }).lambda, 2);
+
+  const negated = readCandidateBits([-1, 0, -1, 0, 5], 4);
+  assert.deepEqual(negated.bits, [1, 0, 1, 0], 'lambda = -1 covers the negated vector');
+
+  // The one that matters: TWO distinct non-zero values is not a bit vector,
+  // and must be refused rather than flattened into one.
+  const mixed = readCandidateBits([1, 0, 2, 0, -5], 4);
+  assert.equal(mixed.bits, null, 'a row with two distinct non-zero values is not a candidate');
+  assert.match(
+    String((mixed as { detail: string }).detail),
+    /two distinct non-zero values/,
+    'and the refusal must say why',
+  );
+
+  const zero = readCandidateBits([0, 0, 0, 0, 7], 4);
+  assert.equal(zero.bits, null, 'an all-zero head carries no message');
+
+  // And the rule is live in the pipeline, not merely present in a helper: a
+  // real reduction produces rows refused for exactly this reason.
+  const sweepRejects = attackPublicOnly({
+    publicWeights: PINNED[2].publicWeights,
+    target: PINNED[2].target + 7n,
+    delta: DELTA,
+  }).rejections.filter((r) => r.reason === 'coordinates-outside-bit-set');
+  assert.equal(
+    sweepRejects.length > 0,
+    true,
+    'a real reduction must produce rows refused for coordinates outside the bit set',
+  );
 
   // Every row the attack actually accepted had first-n coordinates drawn from
   // {0, lambda} for ONE lambda. Assert that on the winning row itself.

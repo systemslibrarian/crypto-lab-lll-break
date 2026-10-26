@@ -508,8 +508,16 @@ export function verifyCandidate(
  * Algorithm SV step (3): a row is a candidate only if its first n coordinates
  * are all 0 or all one fixed non-zero lambda. Returns the bits, or null with
  * the reason the row was rejected.
+ *
+ * Exported so the rule the paper states can be tested at the level it is
+ * stated. Relaxing it does not usually produce a false recovery -- the exact
+ * public-sum check downstream catches nearly everything -- which is precisely
+ * why it needs its own test: a row like (1, 0, 2, 0, ...) does not encode the
+ * bit vector (1, 0, 1, 0, ...), and reading one as the other is fabricating a
+ * plaintext the lattice vector never carried. It would take only a coincidence
+ * in the sum for that fabrication to be reported as a break.
  */
-function bitsFromRow(
+export function readCandidateBits(
   row: readonly number[],
   n: number,
 ): { bits: number[]; lambda: number } | { bits: null; detail: string } {
@@ -617,7 +625,7 @@ export function attackPublicOnly(instance: PublicKnapsackInstance): KnapsackAtta
     for (let r = 0; r < reduction.reducedBasis.length; r += 1) {
       rowsInspected += 1;
       const row = reduction.reducedBasis[r];
-      const read = bitsFromRow(row, n);
+      const read = readCandidateBits(row, n);
       if (read.bits === null) {
         rejections.push({
           pass,
