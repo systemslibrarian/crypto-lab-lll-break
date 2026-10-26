@@ -102,14 +102,21 @@ export interface KnapsackAttackResult {
   readonly reducedBasis: readonly (readonly number[])[];
   /** Pass 1's swap count. */
   readonly swapCount: number;
+  /**
+   * True only after independently checking, in BigInt, that every returned
+   * reduced row equals U times the input basis and det(U) = +/-1. Floating
+   * Gram-Schmidt chooses the row operations; this postcondition proves those
+   * operations still returned a basis of the same integer lattice.
+   */
+  readonly exactLatticeTransformVerified: boolean;
   /** Set only when outcome === 'refused'. */
   readonly refusal: string | null;
 }
 
 export interface ArithmeticBudget {
-  /** E = max(max public weight, target). */
+  /** E = max(max public weight, M, sum(a_i) - M): both Algorithm SV passes. */
   readonly maxEntry: number;
-  /** (n+1) * E^2 — the worst Gram-Schmidt dot product this basis can produce. */
+  /** (n+1) * E^2 — a conservative bound for either input basis's row norms. */
   readonly required: number;
   readonly limit: number;
   readonly withinBudget: boolean;
@@ -396,27 +403,34 @@ export function density(publicWeights: readonly bigint[]): number {
 
 /**
  * The lattice is handed to a `number[][]` reducer with a floating-point
- * Gram-Schmidt, so the instance has to fit in exact integers twice over:
+ * Gram-Schmidt, so both Algorithm SV input bases have to fit in exact integers:
  *
- *   1. every entry is a safe integer, so LLL's row operations are exact;
- *   2. (n+1) * E^2 <= MAX_SAFE_INTEGER, so every Gram-Schmidt dot product — a
- *      sum of n+1 products each at most E^2 — is exact too.
+ *   1. every input entry is a safe integer;
+ *   2. (n+1) * E^2 <= MAX_SAFE_INTEGER, so each input row's squared norm is
+ *      exact before the floating-point Gram-Schmidt work begins.
  *
- * Outside this the instance is REFUSED rather than attacked anyway.
+ * E includes M AND sum(a_i)-M because Algorithm SV step (4) reduces a second
+ * basis. Measuring only M can approve a second pass that is actually outside
+ * the declared boundary.
  *
- * What the budget does not cover, and what is disclosed in the UI: `mu` is a
- * division and `norm` a square root, so LLL's DECISIONS are floating-point even
- * inside the budget. That can only yield a worse-reduced basis, never a false
- * success, because acceptance is decided by the exact BigInt check in
- * `verifyCandidate` and never by a norm.
+ * This is an INPUT screen, not a claim that every intermediate dot product is
+ * exact. `mu` uses division, and size reduction can grow working-basis entries.
+ * After each pass, `attackPublicOnly` therefore verifies in BigInt that the
+ * returned basis is exactly U times the input and det(U)=+/-1. A failed
+ * postcondition is a refusal. A surviving candidate must separately satisfy the
+ * public subset sum in BigInt.
  */
 export function arithmeticBudget(
   publicWeights: readonly bigint[],
   target: bigint,
 ): ArithmeticBudget {
   const n = publicWeights.length;
-  let max = target;
-  for (const a of publicWeights) if (a > max) max = a;
+  const total = sumOf(publicWeights);
+  const complementTarget = total - target;
+  const absolute = (value: bigint) => (value < 0n ? -value : value);
+  let max = absolute(target);
+  if (absolute(complementTarget) > max) max = absolute(complementTarget);
+  for (const a of publicWeights) if (absolute(a) > max) max = absolute(a);
   const maxEntry = Number(max);
   const required = (n + 1) * maxEntry * maxEntry;
   const limit = Number.MAX_SAFE_INTEGER;
@@ -425,7 +439,7 @@ export function arithmeticBudget(
     maxEntry,
     required,
     limit,
-    withinBudget: entriesExact && required <= limit,
+    withinBudget: entriesExact && Number.isSafeInteger(required) && required <= limit,
     headroom: required > 0 ? limit / required : Number.POSITIVE_INFINITY,
   };
 }
@@ -451,17 +465,122 @@ export function lagariasOdlyzkoBasis(
   target: bigint,
 ): number[][] {
   const n = publicWeights.length;
+  const toSafeInteger = (value: bigint, label: string): number => {
+    const converted = Number(value);
+    if (!Number.isSafeInteger(converted)) {
+      throw new Error(`${label} does not fit exactly in a JavaScript safe integer`);
+    }
+    return converted;
+  };
   const basis: number[][] = [];
   for (let i = 0; i < n; i += 1) {
     const row = new Array<number>(n + 1).fill(0);
     row[i] = 1;
-    row[n] = -Number(publicWeights[i]);
+    row[n] = -toSafeInteger(publicWeights[i], `public weight a_${i + 1}`);
     basis.push(row);
   }
   const last = new Array<number>(n + 1).fill(0);
-  last[n] = Number(target);
+  last[n] = toSafeInteger(target, 'subset-sum target M');
   basis.push(last);
   return basis;
+}
+
+/* ------------------------------------------------------------------------ */
+/* Exact postcondition for the floating-point LLL engine                     */
+/* ------------------------------------------------------------------------ */
+
+function safeIntegerMatrix(matrix: readonly (readonly number[])[]): bigint[][] | null {
+  if (matrix.length === 0) return null;
+  const width = matrix[0].length;
+  if (width === 0 || matrix.some((row) => row.length !== width)) return null;
+  const out: bigint[][] = [];
+  for (const row of matrix) {
+    const converted: bigint[] = [];
+    for (const value of row) {
+      if (!Number.isSafeInteger(value)) return null;
+      converted.push(BigInt(value));
+    }
+    out.push(converted);
+  }
+  return out;
+}
+
+/** Exact fraction-free determinant over integers (Bareiss elimination). */
+function determinantBigInt(matrix: readonly (readonly bigint[])[]): bigint {
+  const n = matrix.length;
+  if (n === 0 || matrix.some((row) => row.length !== n)) return 0n;
+  if (n === 1) return matrix[0][0];
+  const work = matrix.map((row) => row.slice());
+  let sign = 1n;
+  let previousPivot = 1n;
+  for (let k = 0; k < n - 1; k += 1) {
+    let pivot = k;
+    while (pivot < n && work[pivot][k] === 0n) pivot += 1;
+    if (pivot === n) return 0n;
+    if (pivot !== k) {
+      [work[k], work[pivot]] = [work[pivot], work[k]];
+      sign = -sign;
+    }
+    const pivotValue = work[k][k];
+    for (let i = k + 1; i < n; i += 1) {
+      for (let j = k + 1; j < n; j += 1) {
+        work[i][j] =
+          (work[i][j] * pivotValue - work[i][k] * work[k][j]) / previousPivot;
+      }
+      work[i][k] = 0n;
+    }
+    previousPivot = pivotValue;
+  }
+  return sign * work[n - 1][n - 1];
+}
+
+function exactLatticeTransformError(
+  inputBasis: readonly (readonly number[])[],
+  reducedBasis: readonly (readonly number[])[],
+  transform: readonly (readonly number[])[],
+): string | null {
+  const input = safeIntegerMatrix(inputBasis);
+  const reduced = safeIntegerMatrix(reducedBasis);
+  const u = safeIntegerMatrix(transform);
+  if (input === null || reduced === null || u === null) {
+    return 'a basis or transform entry was not an exact safe integer';
+  }
+  const n = input.length;
+  if (
+    input.some((row) => row.length !== n) ||
+    reduced.length !== n ||
+    reduced.some((row) => row.length !== n) ||
+    u.length !== n ||
+    u.some((row) => row.length !== n)
+  ) {
+    return 'the basis or transform was not square with the expected dimension';
+  }
+  const det = determinantBigInt(u);
+  if (det !== 1n && det !== -1n) {
+    return `the exact transform determinant was ${det}, not +/-1`;
+  }
+  for (let row = 0; row < n; row += 1) {
+    for (let col = 0; col < n; col += 1) {
+      let reconstructed = 0n;
+      for (let j = 0; j < n; j += 1) reconstructed += u[row][j] * input[j][col];
+      if (reconstructed !== reduced[row][col]) {
+        return `reducedBasis != U * inputBasis at row ${row + 1}, column ${col + 1}`;
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Independent exact check for the integer-lattice invariant claimed by the UI.
+ * This deliberately shares no floating-point dot product with `lllReduce`.
+ */
+export function verifyExactLatticeTransform(
+  inputBasis: readonly (readonly number[])[],
+  reducedBasis: readonly (readonly number[])[],
+  transform: readonly (readonly number[])[],
+): boolean {
+  return exactLatticeTransformError(inputBasis, reducedBasis, transform) === null;
 }
 
 /**
@@ -578,10 +697,35 @@ export function attackPublicOnly(instance: PublicKnapsackInstance): KnapsackAtta
     basis: [] as number[][],
     reducedBasis: [] as number[][],
     swapCount: 0,
+    exactLatticeTransformVerified: false,
   };
 
   if (publicWeights.length < 2) {
     return { ...empty, outcome: 'refused', rowsInspected: 0, refusal: 'Need at least two public weights' };
+  }
+  for (let i = 0; i < publicWeights.length; i += 1) {
+    if (publicWeights[i] <= 0n) {
+      return {
+        ...empty,
+        outcome: 'refused',
+        rowsInspected: 0,
+        refusal: `Algorithm SV requires positive public weights; a_${i + 1} = ${publicWeights[i]}`,
+      };
+    }
+  }
+  const total = sumOf(publicWeights);
+  // Lagarias-Odlyzko Section 2, immediately before Algorithm SV: the two
+  // trivial endpoints are outside its stated domain. The UI rejects the
+  // all-zero message before key generation and still permits trapdoor
+  // encryption/decryption of the all-one endpoint, but neither endpoint may be
+  // dressed up as an execution of Algorithm SV.
+  if (target < 1n || target >= total) {
+    return {
+      ...empty,
+      outcome: 'refused',
+      rowsInspected: 0,
+      refusal: `Algorithm SV requires 1 <= M < sum(a_i); got M = ${target}, sum(a_i) = ${total}`,
+    };
   }
   // Lenstra-Lenstra-Lovasz (1.5): the constant may be any fixed 1/4 < d < 1.
   if (!Number.isFinite(delta) || delta <= 0.25 || delta >= 1) {
@@ -600,13 +744,12 @@ export function attackPublicOnly(instance: PublicKnapsackInstance): KnapsackAtta
       rowsInspected: 0,
       refusal:
         `Instance is outside the exact-arithmetic budget: (n+1)*E^2 = ${budget.required.toExponential(3)} ` +
-        `exceeds MAX_SAFE_INTEGER = ${budget.limit}. Reducing it would silently lose precision in ` +
-        'the Gram-Schmidt dot products, so it is refused rather than attacked.',
+        `exceeds MAX_SAFE_INTEGER = ${budget.limit}. Reducing it could make this Number-based ` +
+        'Gram-Schmidt arithmetic inexact before the independent BigInt postcheck, so it is refused rather than attacked.',
     };
   }
 
   const n = publicWeights.length;
-  const total = sumOf(publicWeights);
   const rejections: CandidateRejection[] = [];
   let rowsInspected = 0;
   let firstBasis: number[][] = [];
@@ -622,7 +765,34 @@ export function attackPublicOnly(instance: PublicKnapsackInstance): KnapsackAtta
   for (const { pass, passTarget, complement } of passes) {
     if (passTarget < 0n) continue;
     const basis = lagariasOdlyzkoBasis(publicWeights, passTarget);
-    const reduction = lllReduce(basis.map((r) => r.slice()), delta);
+    let reduction: ReturnType<typeof lllReduce>;
+    try {
+      reduction = lllReduce(basis.map((r) => r.slice()), delta);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (!/LLL did not converge within operation bound/.test(message)) throw error;
+      return {
+        ...empty,
+        outcome: 'refused',
+        rowsInspected,
+        refusal: `Lattice reduction did not complete on pass ${pass}: ${message}`,
+      };
+    }
+    const postconditionError = exactLatticeTransformError(
+      basis,
+      reduction.reducedBasis,
+      reduction.transform,
+    );
+    if (postconditionError !== null) {
+      return {
+        ...empty,
+        outcome: 'refused',
+        rowsInspected,
+        refusal:
+          `Exact lattice-transform postcheck failed on pass ${pass}: ${postconditionError}. ` +
+          'No candidate from this floating-point reduction is accepted.',
+      };
+    }
     if (pass === 1) {
       firstBasis = basis;
       firstReduced = reduction.reducedBasis.map((r) => r.slice());
@@ -665,6 +835,7 @@ export function attackPublicOnly(instance: PublicKnapsackInstance): KnapsackAtta
         basis: firstBasis,
         reducedBasis: firstReduced,
         swapCount: firstSwaps,
+        exactLatticeTransformVerified: true,
         refusal: null,
       };
     }
@@ -682,6 +853,7 @@ export function attackPublicOnly(instance: PublicKnapsackInstance): KnapsackAtta
     basis: firstBasis,
     reducedBasis: firstReduced,
     swapCount: firstSwaps,
+    exactLatticeTransformVerified: true,
     refusal: null,
   };
 }

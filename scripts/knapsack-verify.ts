@@ -32,6 +32,7 @@ import {
   readCandidateBits,
   sumOf,
   verifyCandidate,
+  verifyExactLatticeTransform,
   type MerkleHellmanPrivateKey,
   type PublicKnapsackInstance,
 } from '../src/knapsack';
@@ -342,6 +343,51 @@ check('the Lagarias-Odlyzko basis is the printed (2.4) and contains the plaintex
   }
 });
 
+check('the reduced basis is postchecked as an exact unimodular transform', () => {
+  const identity = [
+    [1, 0],
+    [0, 1],
+  ];
+  const unimodular = [
+    [1, 2],
+    [0, 1],
+  ];
+  assert.equal(
+    verifyExactLatticeTransform(identity, unimodular, unimodular),
+    true,
+    'U * I = U with det(U)=1 must pass',
+  );
+  assert.equal(
+    verifyExactLatticeTransform(identity, [[2, 0], [0, 1]], [[2, 0], [0, 1]]),
+    false,
+    'a transform with determinant 2 changes the lattice and must fail',
+  );
+  assert.equal(
+    verifyExactLatticeTransform(identity, [[1, 1], [0, 1]], identity),
+    false,
+    'a reduced basis that is not U times the input must fail',
+  );
+  assert.equal(
+    verifyExactLatticeTransform(identity, [[Number.MAX_SAFE_INTEGER + 1, 0], [0, 1]], identity),
+    false,
+    'an inexact Number entry must fail before BigInt conversion',
+  );
+
+  for (const fixture of PINNED) {
+    const result = attackPublicOnly({
+      publicWeights: fixture.publicWeights,
+      target: fixture.target,
+      delta: DELTA,
+    });
+    assert.notEqual(result.outcome, 'refused', `${fixture.label}: live reduction unexpectedly refused`);
+    assert.equal(
+      result.exactLatticeTransformVerified,
+      true,
+      `${fixture.label}: every accepted reduction must carry the exact postcondition`,
+    );
+  }
+});
+
 check('density follows n over log2 of the largest public weight', () => {
   // Pinned by hand: max weight 1024 = 2^10, so d = 8/10 exactly.
   assert.equal(density([3n, 1024n, 77n, 5n, 9n, 11n, 13n, 17n]), 0.8);
@@ -357,10 +403,29 @@ check('density follows n over log2 of the largest public weight', () => {
 });
 
 check('an instance outside the exact-arithmetic budget is refused, not attacked', () => {
-  const pair = seededKey(12, 30, 99);
-  const target = encryptBits(pair.publicWeights, toBits('011010010110'));
+  // This is inside the page's own controls. Measuring pass 1 alone approves it,
+  // but Algorithm SV step (4) has a much larger target and must make the whole
+  // two-pass run refuse.
+  const pair = seededKey(12, 10, 1);
+  const target = encryptBits(pair.publicWeights, toBits('100000000000'));
+  const complementTarget = sumOf(pair.publicWeights) - target;
+  let passOneMax = target;
+  for (const a of pair.publicWeights) if (a > passOneMax) passOneMax = a;
+  const passOneOnlyRequired = 13 * Number(passOneMax) ** 2;
+  assert.equal(
+    passOneOnlyRequired < Number.MAX_SAFE_INTEGER,
+    true,
+    'the regression fixture must expose the old pass-1-only budget bug',
+  );
+  assert.equal(complementTarget.toString(), '47730761');
   const budget = arithmeticBudget(pair.publicWeights, target);
   assert.equal(budget.withinBudget, false, 'this fixture exists to be over budget');
+  assert.equal(budget.maxEntry, Number(complementTarget), 'E must include the pass-2 target');
+  assert.equal(
+    budget.required > Number.MAX_SAFE_INTEGER,
+    true,
+    'the complete two-pass input screen must exceed MAX_SAFE_INTEGER',
+  );
   const result = attackPublicOnly({ publicWeights: pair.publicWeights, target, delta: DELTA });
   assert.equal(result.outcome, 'refused', 'an over-budget instance must be refused');
   assert.match(String(result.refusal), /exact-arithmetic budget/);
@@ -374,6 +439,22 @@ check('an instance outside the exact-arithmetic budget is refused, not attacked'
       true,
       `${fixture.label} must be inside the budget`,
     );
+  }
+});
+
+check('Algorithm SV refuses weights and targets outside its published domain', () => {
+  const weights = [3n, 7n, 12n];
+  for (const target of [-1n, 0n, 22n, 23n]) {
+    const result = attackPublicOnly({ publicWeights: weights, target, delta: DELTA });
+    assert.equal(result.outcome, 'refused', `target ${target} must be refused`);
+    assert.match(String(result.refusal), /1 <= M < sum\(a_i\)/);
+    assert.equal(result.rowsInspected, 0, 'an out-of-domain target must never reach LLL');
+  }
+  for (const bad of [[0n, 7n, 12n], [-3n, 7n, 12n]]) {
+    const result = attackPublicOnly({ publicWeights: bad, target: 7n, delta: DELTA });
+    assert.equal(result.outcome, 'refused');
+    assert.match(String(result.refusal), /positive public weights/);
+    assert.equal(result.rowsInspected, 0);
   }
 });
 
@@ -409,11 +490,16 @@ check('the public-only attack recovers the message on pinned low-density instanc
     });
     assert.equal(result.outcome, 'recovered', `${fixture.label}: expected a recovery`);
     assert.deepEqual(result.bits, bits, `${fixture.label}: recovered the wrong bits`);
-    assert.equal(
-      verifyCandidate(fixture.publicWeights, fixture.target, result.bits!),
-      true,
-      `${fixture.label}: the recovered bits must satisfy the public subset sum`,
+    const independentSum = result.bits!.reduce(
+      (sum, bit, i) => sum + (bit === 1 ? fixture.publicWeights[i] : 0n),
+      0n,
     );
+    assert.equal(
+      independentSum.toString(),
+      fixture.target.toString(),
+      `${fixture.label}: an independent sum must verify the recovered bits`,
+    );
+    assert.equal(result.exactLatticeTransformVerified, true);
     // The search is bounded and that bound is asserted, not just documented.
     assert.equal(
       result.rowsInspected <= 2 * (fixture.n + 1),
@@ -421,6 +507,23 @@ check('the public-only attack recovers the message on pinned low-density instanc
       `${fixture.label}: inspected ${result.rowsInspected} rows, over the 2(n+1) bound`,
     );
   }
+});
+
+check('Algorithm SV step (4) recovers a fixture that needs the complement pass', () => {
+  const bits = toBits('0110100101100101');
+  const pair = seededKey(16, 1, 5);
+  const target = encryptBits(pair.publicWeights, bits);
+  const result = attackPublicOnly({ publicWeights: pair.publicWeights, target, delta: DELTA });
+  assert.equal(result.outcome, 'recovered');
+  assert.equal(result.pass, 2, 'this fixture must cross the complement-pass boundary');
+  assert.equal(result.rowsInspected > 17, true, 'pass 1 must have been exhausted first');
+  assert.deepEqual(result.bits, bits, 'complementing the pass-2 candidate must recover the sent bits');
+  const independentSum = result.bits!.reduce(
+    (sum, bit, i) => sum + (bit === 1 ? pair.publicWeights[i] : 0n),
+    0n,
+  );
+  assert.equal(independentSum.toString(), target.toString());
+  assert.equal(result.exactLatticeTransformVerified, true);
 });
 
 check('the attack recovers with no private key in existence at all', () => {
@@ -570,31 +673,35 @@ check('candidate coordinates outside the permitted bit set are rejected', () => 
 });
 
 check('a bounded higher-density sweep shows honest failures and claims no threshold', () => {
-  // n=16, k=1, density about 0.92. Seeds 1..80 with one fixed message.
-  // This is 80 toy instances at ONE dimension. It is reported as a count, and
-  // nothing in this repository turns it into a threshold or a phase transition.
+  // Seeds 1..80 at ONE dimension, with one fixed message. Every figure printed
+  // in the learner-visible hint is owned here. The first draft tested only the
+  // k=1 half of its sentence; its untested "none at k=3" half was false.
   const bits = toBits('0110100101100101');
-  const failures: number[] = [];
-  let attempted = 0;
-  for (let seed = 1; seed <= 80; seed += 1) {
-    const pair = seededKey(16, 1, seed);
-    const target = encryptBits(pair.publicWeights, bits);
-    if (!arithmeticBudget(pair.publicWeights, target).withinBudget) continue;
-    attempted += 1;
-    const result = attackPublicOnly({ publicWeights: pair.publicWeights, target, delta: DELTA });
-    if (result.outcome !== 'recovered' || result.bits!.join('') !== bits.join('')) {
-      failures.push(seed);
+  const expected = new Map<number, number[]>([
+    [1, [30, 37, 46, 64, 71, 73, 78]],
+    [3, [24, 27]],
+    [5, []],
+  ]);
+  for (const [scaleBits, expectedFailures] of expected) {
+    const failures: number[] = [];
+    let attempted = 0;
+    for (let seed = 1; seed <= 80; seed += 1) {
+      const pair = seededKey(16, scaleBits, seed);
+      const target = encryptBits(pair.publicWeights, bits);
+      if (!arithmeticBudget(pair.publicWeights, target).withinBudget) continue;
+      attempted += 1;
+      const result = attackPublicOnly({ publicWeights: pair.publicWeights, target, delta: DELTA });
+      if (result.outcome !== 'recovered' || result.bits!.join('') !== bits.join('')) {
+        failures.push(seed);
+      }
     }
+    assert.equal(attempted, 80, `k=${scaleBits}: every sweep instance must be inside the budget`);
+    assert.deepEqual(
+      failures,
+      expectedFailures,
+      `k=${scaleBits}: the deterministic failure set drifted`,
+    );
   }
-  assert.equal(attempted, 80, 'every instance in the sweep must be inside the budget');
-  assert.deepEqual(
-    failures,
-    [30, 37, 46, 64, 71, 73, 78],
-    'the deterministic failure set at n=16, k=1 drifted',
-  );
-  // The headline the exhibit is allowed to make: failures exist and are bounded.
-  assert.equal(failures.length > 0, true, 'the sweep must contain real failures');
-  assert.equal(failures.length < attempted, true, 'and real successes');
 });
 
 check('the deterministic failure fixture fails cleanly and claims nothing', () => {

@@ -324,7 +324,7 @@ app.innerHTML = `
 
   <p class="heuristic-note">
     <strong>Historical and broken. Do not use this for anything.</strong>
-    Merkle-Hellman (1978) was the first public-key cryptosystem that was not RSA, and it did not survive the 1980s.
+    Merkle-Hellman (1978) was an early public-key encryption proposal, and it did not survive the 1980s.
     What runs below recovers <strong>message bits</strong> from one ciphertext in selected toy low-density instances.
     It does <strong>not</strong> reconstruct the private trapdoor, and it is <strong>not</strong> Shamir's attack, which does.
     Failure to recover here is <strong>not</strong> a security result, and nothing in this exhibit bears on ML-KEM/Kyber,
@@ -351,7 +351,7 @@ app.innerHTML = `
     <button id="mh-attack" type="button" class="btn" disabled>Run LLL Attack (public data only)</button>
   </div>
   <p class="mono" id="mh-status" role="status" aria-live="polite">No key yet. Press Generate. Apply a seed in Reproducible Labs first if you want the same key every time.</p>
-  <p class="mono" id="mh-hint">To watch the attack <em>fail</em>, reproducibly: seed <strong>30</strong>, n = <strong>16</strong>, k = <strong>1</strong>, message <strong>0110100101100101</strong>. The trapdoor still decrypts that instance perfectly - what failed is this browser-scale attack, not the scheme, and that is not a security result. Raising k lowers the density and the failures go away; 7 of 80 seeds fail at k = 1 and none at k = 3. Eighty toy instances at one dimension is a count, not a threshold.</p>
+  <p class="mono" id="mh-hint">To watch the attack <em>fail</em>, reproducibly: seed <strong>30</strong>, n = <strong>16</strong>, k = <strong>1</strong>, message <strong>0110100101100101</strong>. The trapdoor still decrypts that instance perfectly - what failed is this browser-scale attack, not the scheme, and that is not a security result. In the fixed seeds 1-80 sweep, 7 fail at k = 1, 2 fail at k = 3, and none fail at k = 5. That trend is measured, not monotone seed by seed, and eighty toy instances at one dimension is a count, not a threshold.</p>
 
   <div class="grid two">
     <pre id="mh-keys" class="panel mono" tabindex="0" role="region" aria-label="Merkle-Hellman key material"></pre>
@@ -363,13 +363,19 @@ app.innerHTML = `
     <strong>What the density number is, and what it is not.</strong>
     Density is <span class="mono">d = n / log2(max a_i)</span> over the <em>public</em> weights - the convention of
     Lagarias-Odlyzko (1985, Section 1) and, identically, Coster et al. (1992, equation 1.2). The published bounds
-    <span class="mono">0.6463...</span> (Lagarias-Odlyzko) and <span class="mono">0.9408...</span> (Coster et al.)
+    <span class="mono">0.645</span> (as stated by Lagarias-Odlyzko) and <span class="mono">0.9408...</span> (Coster et al.)
     are <strong>conditional on a shortest-vector oracle</strong>, which LLL is not; with real LLL the rigorous
     statement is only <span class="mono">d &lt; c/n</span>. Those theorems also describe a sample space of
-    <em>uniformly random</em> weights, and Merkle-Hellman weights are not uniform - they are
-    <span class="mono">w&middot;a' mod m</span> for a superincreasing <span class="mono">a'</span>. So the bounds are
+    <em>independently uniform</em> weights, while Merkle-Hellman weights are generated jointly as
+    <span class="mono">w&middot;a' mod m</span> from one superincreasing <span class="mono">a'</span> and shared <span class="mono">w,m</span>. So the bounds are
     quoted here as history, not borrowed as authority. <strong>This exhibit does not display a density threshold</strong>,
     because a handful of toy instances cannot locate one.
+    Algorithm SV itself assumes positive weights and <span class="mono">1 &le; M &lt; sum(a_i)</span>. This exhibit rejects
+    the all-zero input before key generation; it can still trapdoor-decrypt the all-one endpoint, but sends neither endpoint
+    to LLL. Its input screen covers both targets
+    <span class="mono">M</span> and <span class="mono">sum(a_i)-M</span>. After each floating-point LLL run, an independent
+    BigInt check requires <span class="mono">reducedBasis = U&middot;inputBasis</span> and <span class="mono">det(U)=&plusmn;1</span>
+    before any candidate is considered.
   </p>
 
   <details class="selfcheck">
@@ -1577,25 +1583,35 @@ mhGenerate.addEventListener('click', () => {
     `  ciphertext S = sum(x_i * a_i) = ${target}`,
     '',
     `Density d = n / log2(max a_i) = ${n} / log2(${keyPair.publicWeights.reduce((a, b) => (a > b ? a : b)).toString()}) = ${d.toFixed(4)}`,
-    `Exact-arithmetic budget: (n+1)*E^2 = ${budget.required.toExponential(3)} vs MAX_SAFE_INTEGER ${budget.limit}`,
+    'Input-basis arithmetic screen covers both Algorithm SV passes:',
+    '  E = max(max a_i, M, sum(a_i)-M)',
+    `  (n+1)*E^2 = ${budget.required.toExponential(3)} vs MAX_SAFE_INTEGER ${budget.limit}`,
     `  within budget: ${budget.withinBudget} (headroom x${budget.headroom.toFixed(1)})`,
   ].join('\n');
 
-  const basis = lagariasOdlyzkoBasis(keyPair.publicWeights, target);
-  const embedded = plaintextVectorInLattice(keyPair.publicWeights, target, bits);
-  mhBasis.textContent = [
-    'Lagarias-Odlyzko Algorithm SV basis (2.4), as printed:',
-    '  b_i     = (0,..,1,..,0, -a_i)',
-    '  b_{n+1} = (0,..,0,      M)',
-    'No scaling constant N, no centring at 1/2 -- this is NOT the Coster et al. embedding.',
-    '',
-    `The ${n + 1} x ${n + 1} basis handed to LLL (delta = ${MH_DELTA}):`,
-    fmtMatrix(basis, n + 1),
-    '',
-    'Lagarias-Odlyzko (3.4): the plaintext vector is in this lattice.',
-    `  sum(e_i * b_i) + b_{n+1} = [${embedded.join(', ')}]`,
-    `  last coordinate = M - sum(e_i a_i) = ${embedded[n]}  (must be 0)`,
-  ].join('\n');
+  if (budget.withinBudget) {
+    const basis = lagariasOdlyzkoBasis(keyPair.publicWeights, target);
+    const embedded = plaintextVectorInLattice(keyPair.publicWeights, target, bits);
+    mhBasis.textContent = [
+      'Lagarias-Odlyzko Algorithm SV basis (2.4), as printed:',
+      '  b_i     = (0,..,1,..,0, -a_i)',
+      '  b_{n+1} = (0,..,0,      M)',
+      'No scaling constant N, no centring at 1/2 -- this is NOT the Coster et al. embedding.',
+      '',
+      `The ${n + 1} x ${n + 1} pass-1 basis eligible to be handed to LLL (delta = ${MH_DELTA}):`,
+      fmtMatrix(basis, n + 1),
+      '',
+      'Lagarias-Odlyzko (3.4): the plaintext vector is in this lattice.',
+      `  sum(e_i * b_i) + b_{n+1} = [${embedded.join(', ')}]`,
+      `  last coordinate = M - sum(e_i a_i) = ${embedded[n]}  (must be 0)`,
+    ].join('\n');
+  } else {
+    mhBasis.textContent = [
+      'Algorithm SV basis not materialized in Number and not handed to LLL.',
+      'At least one of its two input bases is outside the declared exact-input screen.',
+      'The trapdoor route remains exact BigInt arithmetic; press Run LLL Attack to see the named refusal.',
+    ].join('\n');
+  }
 
   mhOutput.textContent = [
     `Encrypted ${n} message bits b1..bn = ${bits.join('')} (b_i multiplies a_i; ascending weight index).`,
@@ -1608,7 +1624,8 @@ mhGenerate.addEventListener('click', () => {
   mhAttack.disabled = false;
   mhStatus.textContent =
     `Key generated: n=${n}, k=${scaleBits} bits, density ${d.toFixed(4)}` +
-    (getSeed() === null ? ' (crypto-random).' : ` (seeded ${getSeed()}).`);
+    (getSeed() === null ? ' (crypto-random).' : ` (seeded ${getSeed()}).`) +
+    (budget.withinBudget ? '' : ' The LLL route is outside its input-basis arithmetic screen.');
 });
 
 mhDecrypt.addEventListener('click', () => {
@@ -1671,11 +1688,14 @@ mhAttack.addEventListener('click', () => {
   if (result.outcome === 'refused') {
     lines.push(`  REFUSED: ${result.refusal}`);
     mhOutput.textContent = lines.join('\n');
-    mhStatus.textContent = 'Attack refused: the instance is outside the exact-arithmetic budget.';
+    mhStatus.textContent = `Attack refused: ${result.refusal}`;
     return;
   }
 
   lines.push(
+    `  Exact lattice postcheck: reducedBasis = U * inputBasis and det(U) = +/-1 -> ${result.exactLatticeTransformVerified}`,
+    '  (Gram-Schmidt decisions remain floating point; this exact BigInt postcheck proves lattice membership.)',
+    '',
     `  Pass 1 (target as given): LLL returned a reduced basis after ${result.swapCount} swaps.`,
     `     its first reduced row: [${(result.reducedBasis[0] ?? []).join(', ')}]`,
     '     (the basis panel above and this row are pass 1; pass 2 reduces a second,',
@@ -1702,7 +1722,9 @@ mhAttack.addEventListener('click', () => {
         result.bits,
       )}`,
       '',
-      'Lattice attack result: SUCCESS -- message bits recovered from public data alone.',
+      exact
+        ? 'Lattice attack result: SUCCESS -- the sent message bits were recovered from public data alone.'
+        : 'Lattice attack result: VERIFIED ALTERNATIVE -- a valid preimage was found, but not the sent message.',
       exact
         ? '  Ground truth (checked after the attack returned): EXACT MATCH with the sent message.'
         : '  Ground truth (checked after the attack returned): verifies, but is NOT the sent message.',
@@ -1732,10 +1754,12 @@ mhAttack.addEventListener('click', () => {
     "That is Shamir's attack, which is a different attack, and is not implemented here.",
   );
 
-  mhOutput.textContent = lines.filter((l) => l !== '').join('\n');
+  mhOutput.textContent = lines.join('\n');
   mhStatus.textContent =
     result.outcome === 'recovered'
-      ? 'Lattice attack recovered message bits from public data alone.'
+      ? result.bits?.join('') === bits.join('')
+        ? 'Lattice attack recovered the sent message bits from public data alone.'
+        : 'Lattice attack found a verified alternative preimage, not the sent message.'
       : 'Lattice attack found no verified candidate. That is not evidence of security.';
 });
 

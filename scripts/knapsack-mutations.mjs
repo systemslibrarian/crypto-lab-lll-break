@@ -1,15 +1,16 @@
 /**
  * E-K-09 mutation gate for the Merkle-Hellman / Lagarias-Odlyzko exhibit.
  *
- * Ten load-bearing edits to `src/knapsack.ts` and one to `src/main.ts`. For
+ * Fifteen load-bearing edits to `src/knapsack.ts` and one to `src/main.ts`. For
  * every one the run proves six things, and restores the source in a
  * `finally`-style path whether or not the mutation was caught:
  *
  *   1. the UNMODIFIED baseline passes the named owning check,
  *   2. the patch produces a NON-EMPTY source diff,
  *   3. the named owning check turns red,
- *   4. it turns red on an ASSERTION (ERR_ASSERTION), not on a crash, a missing
- *      module or an empty run, and exactly one check matched the name,
+ *   4. pure checks turn red on ERR_ASSERTION; the browser check reports exactly
+ *      one named Playwright assertion failure — never a crash, missing module
+ *      or empty run,
  *   5. the source is restored BYTE FOR BYTE,
  *   6. the clean control passes again after restoration.
  *
@@ -102,6 +103,22 @@ const mutations = [
     kind: 'pure',
   },
   {
+    name: 'the arithmetic screen forgets the Algorithm SV complement target',
+    file: KNAPSACK,
+    anchor: '  if (absolute(complementTarget) > max) max = absolute(complementTarget);',
+    replacement: '  if (false && absolute(complementTarget) > max) max = absolute(complementTarget);',
+    check: 'an instance outside the exact-arithmetic budget is refused, not attacked',
+    kind: 'pure',
+  },
+  {
+    name: 'the published Algorithm SV target domain is bypassed',
+    file: KNAPSACK,
+    anchor: '  if (target < 1n || target >= total) {',
+    replacement: '  if (false && (target < 1n || target >= total)) {',
+    check: 'Algorithm SV refuses weights and targets outside its published domain',
+    kind: 'pure',
+  },
+  {
     name: 'the delta range of Lenstra-Lenstra-Lovasz (1.5) is not enforced',
     file: KNAPSACK,
     anchor: '  if (!Number.isFinite(delta) || delta <= 0.25 || delta >= 1) {',
@@ -112,9 +129,34 @@ const mutations = [
   {
     name: 'the Algorithm SV basis silently becomes a scaled Coster-style one',
     file: KNAPSACK,
-    anchor: '    row[n] = -Number(publicWeights[i]);',
-    replacement: '    row[n] = 2 * Number(publicWeights[i]);',
+    anchor: '    row[n] = -toSafeInteger(publicWeights[i], `public weight a_${i + 1}`);',
+    replacement: '    row[n] = 2 * toSafeInteger(publicWeights[i], `public weight a_${i + 1}`);',
     check: 'the Lagarias-Odlyzko basis is the printed (2.4) and contains the plaintext vector',
+    kind: 'pure',
+  },
+  {
+    name: 'the exact unimodular-transform postcheck always passes',
+    file: KNAPSACK,
+    anchor: '  return exactLatticeTransformError(inputBasis, reducedBasis, transform) === null;',
+    replacement: '  return true;',
+    check: 'the reduced basis is postchecked as an exact unimodular transform',
+    kind: 'pure',
+  },
+  {
+    name: 'the attack is handed a non-unimodular transform at its exact postcheck',
+    file: KNAPSACK,
+    anchor: '      reduction.transform,',
+    replacement:
+      '      reduction.transform.map((row, index) => index === 0 ? row.map((value) => 2 * value) : row),',
+    check: 'the public-only attack recovers the message on pinned low-density instances',
+    kind: 'pure',
+  },
+  {
+    name: 'Algorithm SV step 4 repeats pass 1 instead of using the complement target',
+    file: KNAPSACK,
+    anchor: '    { pass: 2, passTarget: total - target, complement: true },',
+    replacement: '    { pass: 2, passTarget: target, complement: true },',
+    check: 'Algorithm SV step (4) recovers a fixture that needs the complement pass',
     kind: 'pure',
   },
   {
@@ -140,7 +182,9 @@ function run(command, args, timeout = 900_000, env = process.env) {
       `${command}: process did not exit normally (${result.error?.message ?? result.signal ?? 'no exit status'})`,
     );
   }
-  return { code: result.status, output: `${result.stdout ?? ''}${result.stderr ?? ''}` };
+  const stdout = result.stdout ?? '';
+  const stderr = result.stderr ?? '';
+  return { code: result.status, stdout, stderr, output: `${stdout}${stderr}` };
 }
 
 const INFRASTRUCTURE_MARKERS = [
@@ -243,11 +287,23 @@ function namedBrowserCheck(mutation, shouldPass) {
     throw new Error(`${mutation.name}: no browser test matched ${JSON.stringify(mutation.check)}`);
   }
   if (shouldPass) {
-    if (result.code !== 0) {
+    if (result.code !== 0 || !/\b1 passed\b/.test(result.output) || /\b1 failed\b/.test(result.output)) {
       throw new Error(`${mutation.name}: expected a green browser baseline\n${result.output.slice(0, 3000)}`);
     }
-  } else if (result.code === 0) {
-    throw new Error(`${mutation.name}: the mutation SURVIVED its browser test\n${result.output.slice(0, 3000)}`);
+  } else {
+    if (result.code === 0) {
+      throw new Error(`${mutation.name}: the mutation SURVIVED its browser test\n${result.output.slice(0, 3000)}`);
+    }
+    if (!/\b1 failed\b/.test(result.output) || !result.output.includes(mutation.check)) {
+      throw new Error(
+        `${mutation.name}: the named browser test did not fail exactly once\n${result.output.slice(0, 3000)}`,
+      );
+    }
+    if (!/Error: expect\(/.test(result.output)) {
+      throw new Error(
+        `${mutation.name}: browser run went red without a Playwright assertion failure\n${result.output.slice(0, 3000)}`,
+      );
+    }
   }
   return digest;
 }
@@ -264,7 +320,8 @@ if (selected.length === 0) {
 for (const file of [KNAPSACK, MAIN, CHECKS, UI_SPEC]) {
   if (run('git', ['status', '--porcelain', '--', file]).output.trim()) {
     throw new Error(
-      `Commit ${file} before replaying mutations; the harness restores from memory, not from git`,
+      `${file} has an existing working-tree change. Preserve or deliberately restore it before ` +
+        'replaying mutations; this harness will not overwrite unrelated work.',
     );
   }
 }
@@ -310,7 +367,11 @@ for (const mutation of selected) {
       console.log('  2b/6 built bundle hash MOVED, so the browser really ran the mutated code');
     }
     console.log('  3/6 owning check RED');
-    console.log('  4/6 red on an assertion, with exactly one check matched');
+    console.log(
+      mutation.kind === 'pure'
+        ? '  4/6 red on ERR_ASSERTION, with exactly one check matched'
+        : '  4/6 exactly one named browser test failed on a Playwright assertion',
+    );
   } finally {
     writeFileSync(mutation.file, original);
   }

@@ -974,12 +974,13 @@ export async function driveAllStates(page: Page, theme: string): Promise<void> {
   await expect(page.locator('#mh-attack')).toBeDisabled();
   await scanAt('Exhibit 6 results retired after an input changed');
 
-  // The refusal state. The scale slider reaches settings whose Gram-Schmidt dot
-  // products would no longer be exact, and those are refused by name rather
-  // than reduced anyway -- prose no other state on the page renders.
+  // The refusal state. At least one of Algorithm SV's two input bases is
+  // outside the declared number[][] screen, and is never materialized or sent
+  // to LLL -- prose no other state on the page renders.
   await page.locator('#mh-scale').fill('20');
   await page.click('#mh-generate');
   await expect(page.locator('#mh-keys')).toContainText('within budget: false');
+  await expect(page.locator('#mh-basis')).toContainText('not handed to LLL');
   await page.click('#mh-attack');
   await expect(page.locator('#mh-output')).toContainText('REFUSED');
   await scanAt('Exhibit 6 refuses an instance outside the exact-arithmetic budget');
@@ -994,6 +995,18 @@ export async function driveAllStates(page: Page, theme: string): Promise<void> {
   await expect(page.locator('#mh-output')).toContainText('Lattice attack result:');
   await scanAt('Exhibit 6 at n=12, the widest basis and longest transcript');
 
+  // A pass-2 success exercises Algorithm SV step (4), including the complement
+  // target and the independently verified second lattice transform.
+  await page.locator('#lab-seed').fill('5');
+  await page.click('#lab-apply-seed');
+  await page.locator('#mh-n').selectOption('16');
+  await page.locator('#mh-scale').fill('1');
+  await page.locator('#mh-bits').fill('0110100101100101');
+  await page.click('#mh-generate');
+  await page.click('#mh-attack');
+  await expect(page.locator('#mh-output')).toContainText('Candidate read off pass 2');
+  await scanAt('Exhibit 6 complement-pass recovery');
+
   // The FAILED verdict, which is the one state in Exhibit 6 that nothing else
   // reaches: every in-budget instance at n <= 12 recovers, so a failure needs
   // n = 16 and the pinned seed from the recipe printed beside the controls.
@@ -1007,6 +1020,18 @@ export async function driveAllStates(page: Page, theme: string): Promise<void> {
   await page.click('#mh-attack');
   await expect(page.locator('#mh-output')).toContainText('Lattice attack result: FAILED');
   await scanAt('Exhibit 6 FAILED verdict on the pinned n=16 failure case');
+
+  // The all-one message still round-trips through the cryptosystem, but its
+  // M=sum(a_i) endpoint is outside Algorithm SV's stated domain and is refused.
+  await page.locator('#mh-n').selectOption('8');
+  await page.locator('#mh-scale').fill('5');
+  await page.locator('#mh-bits').fill('11111111');
+  await page.click('#mh-generate');
+  await page.click('#mh-decrypt');
+  await expect(page.locator('#mh-output')).toContainText('EXACT MATCH with the message that was sent');
+  await page.click('#mh-attack');
+  await expect(page.locator('#mh-output')).toContainText('Algorithm SV requires 1 <= M < sum(a_i)');
+  await scanAt('Exhibit 6 refuses the all-one Algorithm SV endpoint after exact trapdoor decryption');
 
   // ── The canonical labs, which re-drive several exhibits at once ──────────
   for (const lab of [

@@ -86,9 +86,9 @@ public weights.
   run on one toy instance. A failure is reachable and reproducible in the app:
   seed `30`, `n = 16`, `k = 1`, message `0110100101100101`. The trapdoor still
   decrypts that instance perfectly, so what failed is the attack and not the
-  scheme. Raising `k` lowers the density and the failures go away - 7 of 80
-  seeds fail at `k = 1` and none at `k = 3` - which is a count at one dimension,
-  not a threshold.
+  scheme. In the fixed seeds 1-80 sweep, 7 fail at `k = 1`, 2 fail at `k = 3`,
+  and none fail at `k = 5`. Those are measured counts at one dimension, not a
+  threshold or a claim of monotonic behavior for each seed.
 - A small experiment **does not establish a density threshold**, and this lab
   does not display one. Measured at browser scale the attack succeeds at every
   density the arithmetic budget allows at `n = 8`, which means the binding
@@ -104,13 +104,14 @@ d = n / log2( max_i a_i )        over the PUBLIC weights
 ```
 
 That is the convention of Lagarias-Odlyzko (1985, Section 1) and, identically,
-Coster et al. (1992, equation 1.2). The published bounds `0.6463...`
-(Lagarias-Odlyzko) and `0.9408...` (Coster et al.) are **conditional on a
-shortest-vector oracle**, which LLL is not; with real LLL the rigorous statement
-is only `d < c/n`. Those theorems also describe a sample space of *uniformly
-random* weights, and Merkle-Hellman weights are not uniform - they are
-`w * a' mod m` for a superincreasing `a'`. The bounds are quoted as history, not
-borrowed as authority.
+Coster et al. (1992, equation 1.2). Lagarias-Odlyzko state `0.645` for their
+shortest-vector result; Coster et al. later give `0.9408...` for their modified
+embedding. Turning either shortest-vector statement into an attack bound is
+**conditional on a shortest-vector oracle**, which LLL is not; the rigorous
+Lagarias-Odlyzko result for their actual LLL route is of order `1/n`. Those
+theorems sample *independently uniform* weights. Merkle-Hellman's public weights
+are instead generated jointly as `w * a' mod m` from one superincreasing `a'`
+and shared `w,m`. The figures are quoted as history, not borrowed as authority.
 
 ### The embedding
 
@@ -130,7 +131,7 @@ and their Section 3 modification - the one carrying the `0.9408...` bound -
 centres the coordinates at one half. Neither is implemented here.
 
 Candidate extraction is the paper's own step (3): a reduced row is a candidate
-only if its first `n` coordinates are all `0` or all one fixed non-zero `lambda`,
+only if each of its first `n` coordinates is either `0` or one fixed non-zero `lambda`,
 and a candidate is accepted only when `sum(bits_i * a_i) == M` holds exactly in
 integer arithmetic. The search is bounded and disclosed - `n+1` rows per pass,
 two passes (step (4) repeats on `sum(a_i) - M`), so at most `2(n+1)` candidates
@@ -151,14 +152,26 @@ outside those three.
 ### Arithmetic
 
 Key generation, encryption, decryption and every candidate verification use
-`BigInt`. The lattice goes to this lab's existing `number[][]` reducer, so each
-instance must also satisfy `(n+1) * E^2 <= Number.MAX_SAFE_INTEGER` where
-`E = max(max a_i, M)`, which keeps every Gram-Schmidt dot product exact.
-Instances outside that are **refused by name, not attacked anyway**. What the
-budget does not cover is disclosed in the app: `mu` is a division and `norm` a
-square root, so LLL's *decisions* are floating-point even inside it - which can
-only yield a worse-reduced basis, never a false success, because acceptance is
-decided by the exact integer check and never by a norm.
+`BigInt`. Algorithm SV is run only for positive weights and its published
+domain `1 <= M < sum(a_i)`. The exhibit rejects an all-zero message before key
+generation. It can still encrypt and trapdoor-decrypt the all-one endpoint, but
+the public lattice route refuses that endpoint by name rather than presenting it
+as an Algorithm SV run.
+
+The lattice goes to this lab's existing `number[][]` reducer. Before either
+pass, the input screen requires `(n+1) * E^2 <= Number.MAX_SAFE_INTEGER`, where
+`E = max(max a_i, M, sum(a_i)-M)`. Including the complement target is
+load-bearing because Algorithm SV step (4) reduces a second basis. This screen
+keeps both input bases exact, but it does **not** pretend every intermediate
+Gram-Schmidt value is exact: `mu` uses division, and size reduction can grow
+working-basis entries.
+
+After each pass, a separate BigInt postcheck reconstructs the returned basis as
+`U * inputBasis` and requires `det(U) = +/-1`. A failed postcheck is a refusal,
+not a result. Thus floating-point decisions can change which exact basis is
+returned or cause no candidate to be found, while no row is accepted unless it
+is proved to belong to the original lattice and its decoded bits independently
+satisfy the public subset sum in `BigInt`.
 
 One consequence is a limit of the model rather than a fact about knapsacks: low
 density needs large weights, and large weights spend that budget quadratically,

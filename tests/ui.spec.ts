@@ -246,6 +246,9 @@ test('the knapsack lattice attack recovers message bits from public data alone',
   await page.getByRole('button', { name: 'Run LLL Attack (public data only)' }).click();
   const out = page.locator('#mh-output');
   await expect(out).toContainText('Lattice attack result: SUCCESS');
+  await expect(out).toContainText(
+    'Exact lattice postcheck: reducedBasis = U * inputBasis and det(U) = +/-1 -> true',
+  );
 
   const text = (await out.textContent()) ?? '';
   // What the attacker was withheld is stated, and the claim is checked here by
@@ -322,14 +325,15 @@ test('a malformed message is refused by name and generates nothing', async ({ pa
 });
 
 test('an instance over the exact-arithmetic budget is refused, not attacked', async ({ page }) => {
-  // The scale slider reaches settings whose Gram-Schmidt dot products would no
-  // longer be exact in a number[][] reducer. Those are refused by name rather
-  // than reduced anyway, and the refusal is a state a reader can reach.
+  // The scale slider reaches settings whose Algorithm SV input bases exceed
+  // the declared number[][] screen. They are refused before reduction.
   await page.locator('#lab-seed').fill('1234');
   await page.getByRole('button', { name: 'Apply seed' }).click();
   await page.locator('#mh-scale').fill('20');
   await page.getByRole('button', { name: 'Generate Knapsack Key' }).click();
   await expect(page.locator('#mh-keys')).toContainText('within budget: false');
+  await expect(page.locator('#mh-basis')).toContainText('not handed to LLL');
+  await expect(page.locator('#mh-basis')).not.toContainText('basis eligible to be handed to LLL');
 
   await page.getByRole('button', { name: 'Run LLL Attack (public data only)' }).click();
   const out = page.locator('#mh-output');
@@ -344,6 +348,39 @@ test('an instance over the exact-arithmetic budget is refused, not attacked', as
   // ran out of exact integers.
   await page.getByRole('button', { name: 'Decrypt with Trapdoor' }).click();
   await expect(out).toContainText('equals the ciphertext S: true');
+});
+
+test('the all-one endpoint decrypts but is refused as outside Algorithm SV', async ({ page }) => {
+  await page.locator('#lab-seed').fill('17');
+  await page.getByRole('button', { name: 'Apply seed' }).click();
+  await page.locator('#mh-bits').fill('11111111');
+  await page.getByRole('button', { name: 'Generate Knapsack Key' }).click();
+
+  await page.getByRole('button', { name: 'Decrypt with Trapdoor' }).click();
+  await expect(page.locator('#mh-output')).toContainText('recovered bits = 11111111');
+  await expect(page.locator('#mh-output')).toContainText('EXACT MATCH with the message that was sent');
+
+  await page.getByRole('button', { name: 'Run LLL Attack (public data only)' }).click();
+  const out = page.locator('#mh-output');
+  await expect(out).toContainText('REFUSED');
+  await expect(out).toContainText('Algorithm SV requires 1 <= M < sum(a_i)');
+  await expect(out).not.toContainText('Lattice attack result: SUCCESS');
+  await expect(out).not.toContainText('Lattice attack result: FAILED');
+});
+
+test('the complement pass is learner-visible on its pinned recovery', async ({ page }) => {
+  await page.locator('#lab-seed').fill('5');
+  await page.getByRole('button', { name: 'Apply seed' }).click();
+  await page.locator('#mh-n').selectOption('16');
+  await page.locator('#mh-scale').fill('1');
+  await page.locator('#mh-bits').fill('0110100101100101');
+  await page.getByRole('button', { name: 'Generate Knapsack Key' }).click();
+  await page.getByRole('button', { name: 'Run LLL Attack (public data only)' }).click();
+
+  const out = page.locator('#mh-output');
+  await expect(out).toContainText('Candidate read off pass 2');
+  await expect(out).toContainText('Lattice attack result: SUCCESS');
+  await expect(out).toContainText('EXACT MATCH with the sent message');
 });
 
 test('the pinned failure case fails, and is not reported as a security result', async ({ page }) => {
@@ -375,6 +412,9 @@ test('the failure recipe beside the controls refuses to generalise', async ({ pa
   const hint = page.locator('#mh-hint');
   await expect(hint).toContainText('not a security result');
   await expect(hint).toContainText('a count, not a threshold');
+  await expect(hint).toContainText('7 fail at k = 1');
+  await expect(hint).toContainText('2 fail at k = 3');
+  await expect(hint).toContainText('none fail at k = 5');
 });
 
 test('the knapsack exhibit is operable from the keyboard alone', async ({ page }) => {
@@ -402,6 +442,8 @@ test('the knapsack exhibit states its limits without being opened', async ({ pag
   await expect(notes.first()).toContainText('ML-KEM/Kyber');
   await expect(page.locator('#mh-limits')).toContainText('conditional on a shortest-vector oracle');
   await expect(page.locator('#mh-limits')).toContainText('does not display a density threshold');
+  await expect(page.locator('#mh-limits')).toContainText('1 ≤ M < sum(a_i)');
+  await expect(page.locator('#mh-limits')).toContainText('reducedBasis = U·inputBasis');
 });
 
 test('the knapsack panel reflows at 380px without horizontal overflow', async ({ page }) => {
