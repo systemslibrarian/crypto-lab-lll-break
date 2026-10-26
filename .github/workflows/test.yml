@@ -38,11 +38,11 @@ jobs:
       - name: Accessibility gate (axe-core, WCAG A/AA, built app)
         run: npm run test:a11y
 
-      # E-K-09 mutation gate. Sixteen named load-bearing edits, each applied on
+      # E-K-09 mutation gate. Nineteen named load-bearing edits, each applied on
       # its own to a clean tree, each required to be caught by ONE named owning
       # check, each source restored byte for byte afterwards. Fifteen use pure
-      # checks; the src/main.ts edit is owned by a browser test, so it needs the browser
-      # installed above and asserts the built bundle hash actually moved -- a
+      # checks; four src/main.ts edits are owned by browser tests, so they need the browser
+      # installed above, and the harness asserts the built bundle hash actually moved -- a
       # mutation the build never picked up is indistinguishable from one nothing
       # caught.
       - name: Mutation gate (knapsack exhibit)

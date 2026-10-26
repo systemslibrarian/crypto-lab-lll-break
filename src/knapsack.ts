@@ -19,10 +19,12 @@
  * drive. Nothing here reimplements lattice reduction.
  *
  * WHAT THIS IS NOT:
- *   - NOT Shamir's attack. Shamir recovers the TRAPDOOR (w, m, a'). This
- *     recovers MESSAGE BITS from one ciphertext and learns nothing about the
- *     trapdoor. Lagarias-Odlyzko draw that line themselves (Section 1, p. 230),
- *     calling their method complementary to trapdoor-recovery attacks.
+ *   - NOT Shamir's attack. Shamir seeks a usable decryption pair (W*, M*) and
+ *     corresponding superincreasing sequence; the pair need not equal the
+ *     encrypter's original trapdoor. This attack instead recovers MESSAGE BITS
+ *     from one ciphertext and learns no original or equivalent decryption pair.
+ *     Lagarias-Odlyzko draw that line themselves (Section 1, p. 230), calling
+ *     their method complementary to trapdoor-recovery attacks.
  *   - NOT the Coster et al. embedding. The basis below is the ORIGINAL
  *     Lagarias-Odlyzko (2.4): no scaling constant N, no centring at 1/2.
  *     Coster et al. (Computational Complexity 2, 1992, pp. 111-128) restate

@@ -76,10 +76,12 @@ public weights.
 
 - It recovers **message bits** from one ciphertext, in selected toy low-density
   instances.
-- It does **not** reconstruct the private trapdoor. The modulus `m`, the
-  multiplier `w` and the superincreasing sequence `a'` are untouched by it.
-- It is **not** Shamir's attack. Shamir's 1982 attack recovers the trapdoor and
-  is what historically broke the basic scheme; it is not implemented here.
+- It does **not** reconstruct the original private trapdoor or find an equivalent
+  decryption pair. The modulus `m`, multiplier `w` and superincreasing sequence
+  `a'` remain unknown to this attack.
+- It is **not** Shamir's attack. Shamir's attack seeks a usable decryption pair
+  `(W*, M*)`, which need not equal the pair used by the encrypter; that is what
+  historically broke the basic scheme, and it is not implemented here.
   Lagarias and Odlyzko draw that same line themselves, describing their method
   as complementary to attacks "based on recovering trapdoor information".
 - **Failure to recover is not a security result.** It is one browser-scale LLL
@@ -90,9 +92,11 @@ public weights.
   and none fail at `k = 5`. Those are measured counts at one dimension, not a
   threshold or a claim of monotonic behavior for each seed.
 - A small experiment **does not establish a density threshold**, and this lab
-  does not display one. Measured at browser scale the attack succeeds at every
-  density the arithmetic budget allows at `n = 8`, which means the binding
-  constraint here is the dimension, not the density.
+  does not display one. Even an in-budget `n = 8` instance can fail here: seed
+  `10`, `k = 1`, message `00001100` makes the trapdoor decrypt exactly while
+  the two-pass public attack finds no candidate. That bounded counterexample
+  means this experiment does not isolate either dimension or density as the
+  binding cause of success or failure.
 - NP-completeness of generic subset sum says nothing about this structured
   distribution. Nothing here establishes or refutes worst-case lattice hardness,
   and nothing here bears on ML-KEM/Kyber or any production parameter set.
@@ -191,6 +195,12 @@ so low density and large `n` cannot be had together here.
   doi:[10.1145/2455.2461](https://doi.org/10.1145/2455.2461). Sections used: 1
   p. 230 (density); 2 pp. 232-233 (Algorithm SV, basis (2.4), Propositions
   2.1-2.2); 3 pp. 233-234 (the sample space and Theorems 3.3, 3.5).
+- J. C. Lagarias, "Performance Analysis of Shamir's Attack on the Basic
+  Merkle-Hellman Knapsack Cryptosystem", ICALP 1984, pp. 312-323.
+  [Author copy](https://dept.math.lsa.umich.edu/~lagarias/doc/1218attack.pdf),
+  Section 2: the goal is a decryption pair `(W*, M*)` that need not be the
+  encrypter's original `(W, M)`. Cited only to state the boundary between
+  Shamir's attack and the Algorithm SV lesson accurately.
 - A. K. Lenstra, H. W. Lenstra Jr. and L. Lovasz, "Factoring Polynomials with
   Rational Coefficients", *Mathematische Annalen* **261**, 1982, pp. 515-534.
   doi:[10.1007/BF01457454](https://doi.org/10.1007/BF01457454). Sections used:

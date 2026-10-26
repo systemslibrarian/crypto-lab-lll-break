@@ -216,6 +216,43 @@ test('the generated key satisfies the two Merkle-Hellman conditions on screen', 
   );
 });
 
+test('seeded knapsack generation rewinds to the same instance', async ({ page }) => {
+  await page.locator('#lab-seed').fill('1234');
+  await page.getByRole('button', { name: 'Apply seed' }).click();
+  await page.locator('#mh-n').selectOption('8');
+  await page.locator('#mh-scale').fill('14');
+  await page.locator('#mh-bits').fill('01101001');
+
+  await page.getByRole('button', { name: 'Generate Knapsack Key' }).click();
+  const first = (await page.locator('#mh-keys').textContent()) ?? '';
+  await page.getByRole('button', { name: 'Generate Knapsack Key' }).click();
+  const second = (await page.locator('#mh-keys').textContent()) ?? '';
+
+  expect(first).toContain('PUBLIC (everything an attacker is given)');
+  expect(second).toBe(first);
+  await expect(page.locator('#mh-status')).toContainText('(seeded 1234)');
+});
+
+test('a copied lab link preserves every knapsack control', async ({ page }) => {
+  await page.locator('#lab-seed').fill('10');
+  await page.getByRole('button', { name: 'Apply seed' }).click();
+  await page.locator('#mh-n').selectOption('16');
+  await page.locator('#mh-scale').fill('1');
+  await page.locator('#mh-bits').fill('0101010101010101');
+  await page.getByRole('button', { name: 'Copy lab link' }).click();
+
+  const sharedUrl = page.url();
+  expect(sharedUrl).toContain('mhn=16');
+  expect(sharedUrl).toContain('mhk=1');
+  expect(sharedUrl).toContain('mhbits=0101010101010101');
+
+  await page.goto(sharedUrl);
+  await expect(page.locator('#mh-n')).toHaveValue('16');
+  await expect(page.locator('#mh-scale')).toHaveValue('1');
+  await expect(page.locator('#mh-bits')).toHaveValue('0101010101010101');
+  await expect(page.locator('#lab-status')).toContainText('seed=10');
+});
+
 test('trapdoor decryption reproduces the message that was encrypted', async ({ page }) => {
   await knapsackSetup(page);
   await page.getByRole('button', { name: 'Decrypt with Trapdoor' }).click();
@@ -262,8 +299,8 @@ test('the knapsack lattice attack recovers message bits from public data alone',
   expect(text).toContain('EXACT MATCH with the sent message');
 
   // The two things this exhibit must never be read as claiming.
-  expect(text).toContain('The trapdoor is untouched.');
-  expect(text).toContain("That is Shamir's attack, which is a different attack");
+  expect(text).toContain("the original w, m and superincreasing a', or any equivalent decryption pair");
+  expect(text).toContain("Shamir's different attack seeks usable decryption information");
 });
 
 test('a SUCCESS headline is never printed without the exact-sum verification', async ({ page }) => {
@@ -355,6 +392,9 @@ test('the all-one endpoint decrypts but is refused as outside Algorithm SV', asy
   await page.getByRole('button', { name: 'Apply seed' }).click();
   await page.locator('#mh-bits').fill('11111111');
   await page.getByRole('button', { name: 'Generate Knapsack Key' }).click();
+  await expect(page.locator('#mh-basis')).toContainText('Algorithm SV basis not handed to LLL');
+  await expect(page.locator('#mh-basis')).toContainText('published target domain');
+  await expect(page.locator('#mh-basis')).not.toContainText('basis eligible to be handed to LLL');
 
   await page.getByRole('button', { name: 'Decrypt with Trapdoor' }).click();
   await expect(page.locator('#mh-output')).toContainText('recovered bits = 11111111');
@@ -366,6 +406,25 @@ test('the all-one endpoint decrypts but is refused as outside Algorithm SV', asy
   await expect(out).toContainText('Algorithm SV requires 1 <= M < sum(a_i)');
   await expect(out).not.toContainText('Lattice attack result: SUCCESS');
   await expect(out).not.toContainText('Lattice attack result: FAILED');
+});
+
+test('the documented n=8 in-budget counterexample fails without implying security', async ({ page }) => {
+  await page.locator('#lab-seed').fill('10');
+  await page.getByRole('button', { name: 'Apply seed' }).click();
+  await page.locator('#mh-n').selectOption('8');
+  await page.locator('#mh-scale').fill('1');
+  await page.locator('#mh-bits').fill('00001100');
+  await page.getByRole('button', { name: 'Generate Knapsack Key' }).click();
+  await expect(page.locator('#mh-keys')).toContainText('within budget: true');
+
+  await page.getByRole('button', { name: 'Decrypt with Trapdoor' }).click();
+  await expect(page.locator('#mh-output')).toContainText('EXACT MATCH with the message that was sent');
+  await page.getByRole('button', { name: 'Run LLL Attack (public data only)' }).click();
+  const out = page.locator('#mh-output');
+  await expect(out).toContainText('Lattice attack result: FAILED');
+  await expect(out).toContainText('18 reduced rows inspected');
+  await expect(out).toContainText('This is NOT a security result');
+  await expect(out).not.toContainText('Lattice attack result: SUCCESS');
 });
 
 test('the complement pass is learner-visible on its pinned recovery', async ({ page }) => {
@@ -438,6 +497,7 @@ test('the knapsack exhibit states its limits without being opened', async ({ pag
   const notes = page.locator('#exhibit-6 .heuristic-note');
   await expect(notes.first()).toContainText('Historical and broken');
   await expect(notes.first()).toContainText('not Shamir');
+  await expect(notes.first()).toContainText("usable pair that need not equal the encrypter's original trapdoor");
   await expect(notes.first()).toContainText('not a security result');
   await expect(notes.first()).toContainText('ML-KEM/Kyber');
   await expect(page.locator('#mh-limits')).toContainText('conditional on a shortest-vector oracle');

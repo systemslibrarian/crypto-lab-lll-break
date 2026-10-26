@@ -985,15 +985,15 @@ export async function driveAllStates(page: Page, theme: string): Promise<void> {
   await expect(page.locator('#mh-output')).toContainText('REFUSED');
   await scanAt('Exhibit 6 refuses an instance outside the exact-arithmetic budget');
 
-  // The highest-density setting the selector offers, which is also the longest
-  // transcript: n=12 prints a 13x13 basis.
+  // A mid-size 13x13 basis at n=12 exercises a different selector value and a
+  // longer transcript than the default; later states separately cover n=16.
   await page.locator('#mh-n').selectOption('12');
   await page.locator('#mh-scale').fill('6');
   await page.click('#mh-generate');
   await expect(page.locator('#mh-keys')).toContainText('PUBLIC');
   await page.click('#mh-attack');
   await expect(page.locator('#mh-output')).toContainText('Lattice attack result:');
-  await scanAt('Exhibit 6 at n=12, the widest basis and longest transcript');
+  await scanAt('Exhibit 6 at n=12 with a 13x13 basis and expanded transcript');
 
   // A pass-2 success exercises Algorithm SV step (4), including the complement
   // target and the independently verified second lattice transform.
@@ -1007,9 +1007,9 @@ export async function driveAllStates(page: Page, theme: string): Promise<void> {
   await expect(page.locator('#mh-output')).toContainText('Candidate read off pass 2');
   await scanAt('Exhibit 6 complement-pass recovery');
 
-  // The FAILED verdict, which is the one state in Exhibit 6 that nothing else
-  // reaches: every in-budget instance at n <= 12 recovers, so a failure needs
-  // n = 16 and the pinned seed from the recipe printed beside the controls.
+  // The FAILED verdict on the pinned recipe printed beside the controls. Small
+  // in-budget instances can fail too; this drive uses n=16 because that is the
+  // learner-visible sweep whose exact failure counts the page reports.
   await page.locator('#lab-seed').fill('30');
   await page.click('#lab-apply-seed');
   await page.locator('#mh-n').selectOption('16');
@@ -1027,6 +1027,8 @@ export async function driveAllStates(page: Page, theme: string): Promise<void> {
   await page.locator('#mh-scale').fill('5');
   await page.locator('#mh-bits').fill('11111111');
   await page.click('#mh-generate');
+  await expect(page.locator('#mh-basis')).toContainText('Algorithm SV basis not handed to LLL');
+  await expect(page.locator('#mh-basis')).not.toContainText('basis eligible to be handed to LLL');
   await page.click('#mh-decrypt');
   await expect(page.locator('#mh-output')).toContainText('EXACT MATCH with the message that was sent');
   await page.click('#mh-attack');
