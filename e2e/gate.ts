@@ -974,6 +974,16 @@ export async function driveAllStates(page: Page, theme: string): Promise<void> {
   await expect(page.locator('#mh-attack')).toBeDisabled();
   await scanAt('Exhibit 6 results retired after an input changed');
 
+  // The refusal state. The scale slider reaches settings whose Gram-Schmidt dot
+  // products would no longer be exact, and those are refused by name rather
+  // than reduced anyway -- prose no other state on the page renders.
+  await page.locator('#mh-scale').fill('20');
+  await page.click('#mh-generate');
+  await expect(page.locator('#mh-keys')).toContainText('within budget: false');
+  await page.click('#mh-attack');
+  await expect(page.locator('#mh-output')).toContainText('REFUSED');
+  await scanAt('Exhibit 6 refuses an instance outside the exact-arithmetic budget');
+
   // The highest-density setting the selector offers, which is also the longest
   // transcript: n=12 prints a 13x13 basis.
   await page.locator('#mh-n').selectOption('12');

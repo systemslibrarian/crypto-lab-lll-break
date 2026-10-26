@@ -321,6 +321,31 @@ test('a malformed message is refused by name and generates nothing', async ({ pa
   await expect(page.locator('#mh-keys')).toBeEmpty();
 });
 
+test('an instance over the exact-arithmetic budget is refused, not attacked', async ({ page }) => {
+  // The scale slider reaches settings whose Gram-Schmidt dot products would no
+  // longer be exact in a number[][] reducer. Those are refused by name rather
+  // than reduced anyway, and the refusal is a state a reader can reach.
+  await page.locator('#lab-seed').fill('1234');
+  await page.getByRole('button', { name: 'Apply seed' }).click();
+  await page.locator('#mh-scale').fill('20');
+  await page.getByRole('button', { name: 'Generate Knapsack Key' }).click();
+  await expect(page.locator('#mh-keys')).toContainText('within budget: false');
+
+  await page.getByRole('button', { name: 'Run LLL Attack (public data only)' }).click();
+  const out = page.locator('#mh-output');
+  await expect(out).toContainText('REFUSED');
+  await expect(out).toContainText('exceeds MAX_SAFE_INTEGER');
+  // A refusal must never be dressed up as either verdict.
+  await expect(out).not.toContainText('Lattice attack result: SUCCESS');
+  await expect(out).not.toContainText('Lattice attack result: FAILED');
+  await expect(page.locator('#mh-status')).toContainText('outside the exact-arithmetic budget');
+
+  // The trapdoor route is unaffected: the scheme still works, the MODEL is what
+  // ran out of exact integers.
+  await page.getByRole('button', { name: 'Decrypt with Trapdoor' }).click();
+  await expect(out).toContainText('equals the ciphertext S: true');
+});
+
 test('the knapsack exhibit is operable from the keyboard alone', async ({ page }) => {
   await page.locator('#lab-seed').fill('1234');
   await page.getByRole('button', { name: 'Apply seed' }).click();
