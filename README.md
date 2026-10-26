@@ -83,7 +83,12 @@ public weights.
   Lagarias and Odlyzko draw that same line themselves, describing their method
   as complementary to attacks "based on recovering trapdoor information".
 - **Failure to recover is not a security result.** It is one browser-scale LLL
-  run on one toy instance.
+  run on one toy instance. A failure is reachable and reproducible in the app:
+  seed `30`, `n = 16`, `k = 1`, message `0110100101100101`. The trapdoor still
+  decrypts that instance perfectly, so what failed is the attack and not the
+  scheme. Raising `k` lowers the density and the failures go away - 7 of 80
+  seeds fail at `k = 1` and none at `k = 3` - which is a count at one dimension,
+  not a threshold.
 - A small experiment **does not establish a density threshold**, and this lab
   does not display one. Measured at browser scale the attack succeeds at every
   density the arithmetic budget allows at `n = 8`, which means the binding

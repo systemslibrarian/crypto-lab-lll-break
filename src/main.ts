@@ -337,6 +337,7 @@ app.innerHTML = `
         <option value="8" selected>8</option>
         <option value="10">10</option>
         <option value="12">12</option>
+        <option value="16">16</option>
       </select>
     </label>
     <label>Private weight scale k (bits) <input id="mh-scale" type="range" min="1" max="20" value="14" /></label>
@@ -350,6 +351,7 @@ app.innerHTML = `
     <button id="mh-attack" type="button" class="btn" disabled>Run LLL Attack (public data only)</button>
   </div>
   <p class="mono" id="mh-status" role="status" aria-live="polite">No key yet. Press Generate. Apply a seed in Reproducible Labs first if you want the same key every time.</p>
+  <p class="mono" id="mh-hint">To watch the attack <em>fail</em>, reproducibly: seed <strong>30</strong>, n = <strong>16</strong>, k = <strong>1</strong>, message <strong>0110100101100101</strong>. The trapdoor still decrypts that instance perfectly - what failed is this browser-scale attack, not the scheme, and that is not a security result. Raising k lowers the density and the failures go away; 7 of 80 seeds fail at k = 1 and none at k = 3. Eighty toy instances at one dimension is a count, not a threshold.</p>
 
   <div class="grid two">
     <pre id="mh-keys" class="panel mono" tabindex="0" role="region" aria-label="Merkle-Hellman key material"></pre>
@@ -1485,6 +1487,7 @@ const MH_DEFAULT_BITS: Record<string, string> = {
   '8': '01101001',
   '10': '0110100101',
   '12': '011010010110',
+  '16': '0110100101100101',
 };
 
 interface MHInstance {

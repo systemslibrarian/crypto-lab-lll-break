@@ -346,6 +346,37 @@ test('an instance over the exact-arithmetic budget is refused, not attacked', as
   await expect(out).toContainText('equals the ciphertext S: true');
 });
 
+test('the pinned failure case fails, and is not reported as a security result', async ({ page }) => {
+  // The recipe printed beside the controls, driven exactly as a reader would.
+  await page.locator('#lab-seed').fill('30');
+  await page.getByRole('button', { name: 'Apply seed' }).click();
+  await page.locator('#mh-n').selectOption('16');
+  await page.locator('#mh-scale').fill('1');
+  await page.locator('#mh-bits').fill('0110100101100101');
+  await page.getByRole('button', { name: 'Generate Knapsack Key' }).click();
+  await expect(page.locator('#mh-keys')).toContainText('within budget: true');
+
+  await page.getByRole('button', { name: 'Run LLL Attack (public data only)' }).click();
+  const out = page.locator('#mh-output');
+  await expect(out).toContainText('Lattice attack result: FAILED');
+  await expect(out).not.toContainText('Lattice attack result: SUCCESS');
+  await expect(out).toContainText('This is NOT a security result');
+  // A failure must still show the bounded search it actually performed.
+  await expect(out).toContainText('34 reduced rows inspected');
+
+  // And the scheme is untouched: the trapdoor decrypts the very instance the
+  // attack could not break.
+  await page.getByRole('button', { name: 'Decrypt with Trapdoor' }).click();
+  await expect(out).toContainText('EXACT MATCH with the message that was sent');
+  await expect(out).toContainText('equals the ciphertext S: true');
+});
+
+test('the failure recipe beside the controls refuses to generalise', async ({ page }) => {
+  const hint = page.locator('#mh-hint');
+  await expect(hint).toContainText('not a security result');
+  await expect(hint).toContainText('a count, not a threshold');
+});
+
 test('the knapsack exhibit is operable from the keyboard alone', async ({ page }) => {
   await page.locator('#lab-seed').fill('1234');
   await page.getByRole('button', { name: 'Apply seed' }).click();

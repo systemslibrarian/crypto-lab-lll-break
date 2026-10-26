@@ -994,6 +994,20 @@ export async function driveAllStates(page: Page, theme: string): Promise<void> {
   await expect(page.locator('#mh-output')).toContainText('Lattice attack result:');
   await scanAt('Exhibit 6 at n=12, the widest basis and longest transcript');
 
+  // The FAILED verdict, which is the one state in Exhibit 6 that nothing else
+  // reaches: every in-budget instance at n <= 12 recovers, so a failure needs
+  // n = 16 and the pinned seed from the recipe printed beside the controls.
+  await page.locator('#lab-seed').fill('30');
+  await page.click('#lab-apply-seed');
+  await page.locator('#mh-n').selectOption('16');
+  await page.locator('#mh-scale').fill('1');
+  await page.locator('#mh-bits').fill('0110100101100101');
+  await page.click('#mh-generate');
+  await expect(page.locator('#mh-keys')).toContainText('within budget: true');
+  await page.click('#mh-attack');
+  await expect(page.locator('#mh-output')).toContainText('Lattice attack result: FAILED');
+  await scanAt('Exhibit 6 FAILED verdict on the pinned n=16 failure case');
+
   // ── The canonical labs, which re-drive several exhibits at once ──────────
   for (const lab of [
     'swap-cascade',
