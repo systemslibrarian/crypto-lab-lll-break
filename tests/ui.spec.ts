@@ -224,6 +224,18 @@ test('trapdoor decryption reproduces the message that was encrypted', async ({ p
   await expect(out).toContainText('recovered bits = 01101001');
   await expect(out).toContainText('remainder after the pass = 0 (must be 0: true)');
   await expect(out).toContainText('EXACT MATCH with the message that was sent');
+
+  // The greedy pass agreeing with itself is not evidence. Re-encrypting the
+  // recovered bits under the public weights is, and the page must show it.
+  await expect(out).toContainText('Independent check, using the PUBLIC weights only');
+  await expect(out).toContainText('equals the ciphertext S: true');
+  const keys = (await page.locator('#mh-keys').textContent()) ?? '';
+  const { weights, target } = readPublicInstance(keys);
+  const shown = (((await out.textContent()) ?? '').match(/re-encrypting the recovered bits gives (\d+)/) ?? [])[1];
+  expect(BigInt(shown ?? '0')).toBe(target);
+  let sum = 0n;
+  for (let i = 0; i < 8; i += 1) if ('01101001'[i] === '1') sum += weights[i];
+  expect(sum).toBe(target);
 });
 
 test('the knapsack lattice attack recovers message bits from public data alone', async ({ page }) => {

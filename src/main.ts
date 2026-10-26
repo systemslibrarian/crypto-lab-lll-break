@@ -1613,6 +1613,10 @@ mhDecrypt.addEventListener('click', () => {
   const { keyPair, target, bits } = mhInstance;
   const result = decryptWithTrapdoor(keyPair.privateKey, target);
   const exact = result.bits.join('') === bits.join('');
+  // Independent of the greedy pass and of the trapdoor: re-encrypt what came
+  // back under the PUBLIC weights and check it reproduces the ciphertext. The
+  // greedy loop agreeing with itself is not evidence; this is.
+  const reEncrypted = encryptBits(keyPair.publicWeights, result.bits);
   mhOutput.textContent = [
     'TRAPDOOR ROUTE -- the legitimate receiver, holding w, m and a\'.',
     `  S  = ${target}`,
@@ -1620,6 +1624,10 @@ mhDecrypt.addEventListener('click', () => {
     "  greedy pass over the superincreasing a', largest first, Merkle-Hellman (2):",
     `     recovered bits = ${result.bits.join('')}`,
     `     remainder after the pass = ${result.remainder} (must be 0: ${result.consistent})`,
+    '',
+    '  Independent check, using the PUBLIC weights only:',
+    `     re-encrypting the recovered bits gives ${reEncrypted}`,
+    `     equals the ciphertext S: ${reEncrypted === target}`,
     '',
     exact
       ? '  Trapdoor decryption: EXACT MATCH with the message that was sent.'
