@@ -79,7 +79,7 @@ app.innerHTML = `
       </p>
       <p class="mono det-line">
         <span id="det-label"></span>
-        <button type="button" id="det-help" class="info-dot" aria-label="What does the determinant mean?" title="Area of one grid cell - it never changes no matter which basis you pick.">i</button>
+        <button type="button" id="det-help" class="info-dot" aria-label="What does the determinant mean?" title="Area of one grid cell - it never changes no matter which basis you pick."><span aria-hidden="true">i</span></button>
       </p>
       <p class="det-tip" id="det-tip" hidden>Determinant = area of one grid cell (the fundamental parallelogram). It never changes no matter which basis you pick for the same lattice - that is what makes it the invariant the whole tour relies on.</p>
       <p class="mono" id="same-lattice-label"></p>
@@ -291,7 +291,7 @@ app.innerHTML = `
     Real numbers come from the
     <a href="https://github.com/malb/lattice-estimator" target="_blank" rel="noopener">lattice estimator</a>,
     which models sieving/BKZ cost far more carefully.
-    <button type="button" id="beta-help" class="info-dot" aria-label="Where does the beta formula come from?" title="beta grows with dimension n and shrinks as the noise-to-modulus ratio widens the unique-shortest-vector gap; log2(q/sigma) sizes that gap.">i</button>
+    <button type="button" id="beta-help" class="info-dot" aria-label="Where does the beta formula come from?" title="beta grows with dimension n and shrinks as the noise-to-modulus ratio widens the unique-shortest-vector gap; log2(q/sigma) sizes that gap."><span aria-hidden="true">i</span></button>
   </p>
   <p class="det-tip" id="beta-tip" hidden>
     Where the formula comes from: the primal embedding has a unique shortest vector whose gap over
