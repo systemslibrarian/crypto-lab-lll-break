@@ -7,6 +7,14 @@ on:
   pull_request:
   workflow_dispatch:
 
+# Least privilege for every job that does not ask for more. `test` only reads
+# this repository: checkout, npm ci, verify, build, a Playwright browser
+# install, then the UI, a11y and mutation suites against a local server.
+# `dependabot-auto-merge` declares its own wider block below, which overrides
+# this for that job alone, so the bump and its deploy dispatch are unchanged.
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
