@@ -1,0 +1,60 @@
+name: Gate
+
+# ONE definition of this lab's gate, called by the workflow a Dependabot bump
+# must clear and by the workflow that publishes. `needs:` cannot cross files,
+# so before this the deploy carried its own copy and nothing held the two
+# equal -- in this lab they had already drifted apart.
+#
+# A separate file rather than `workflow_call` on the CI workflow, because that
+# file's dependabot-auto-merge job holds contents: write, pull-requests: write
+# and actions: write, and a called workflow may not hold permissions above its
+# CALLER. Calling it from a deploy that holds contents: read fails the run at
+# startup before any job exists (measured: crypto-lab-key-exchange run
+# 44528331135, conclusion startup_failure).
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Algorithm + guardrail verification
+        run: npm run verify
+
+      - name: Type check and build
+        run: npm run build
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: UI smoke tests (Playwright, built app)
+        run: npm run test:ui
+
+      - name: Accessibility gate (axe-core, WCAG A/AA, built app)
+        run: npm run test:a11y
+
+      # E-K-09 mutation gate. Nineteen named load-bearing edits, each applied on
+      # its own to a clean tree, each required to be caught by ONE named owning
+      # check, each source restored byte for byte afterwards. Fifteen use pure
+      # checks; four src/main.ts edits are owned by browser tests, so they need the browser
+      # installed above, and the harness asserts the built bundle hash actually moved -- a
+      # mutation the build never picked up is indistinguishable from one nothing
+      # caught.
+      - name: Mutation gate (knapsack exhibit)
+        run: npm run test:mutations
